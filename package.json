@@ -1,0 +1,11 @@
+{
+  "name": "logseq-mochi-sync",
+  "version": "1.0.0",
+  "main": "index.html",
+  "logseq": {
+    "id": "_c4uiessg7"
+  },
+  "dependencies": {
+    "@logseq/libs": "^0.0.17"
+  }
+}
