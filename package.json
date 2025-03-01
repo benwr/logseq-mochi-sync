@@ -1,11 +1,28 @@
 {
   "name": "logseq-mochi-sync",
   "version": "1.0.0",
-  "main": "index.html",
+  "author": "Ben Weinstein-Raun",
+  "description": "A Logseq plugin for syncing with Mochi",
+  "license": "Apache-2.0",
+  "main": "dist/index.html",
+  "scripts": {
+    "build": "vite build",
+    "serve": "vite"
+  },
   "logseq": {
     "id": "_c4uiessg7"
   },
   "dependencies": {
-    "@logseq/libs": "^0.0.17"
+    "@logseq/libs": "0.0.17",
+    "mldoc": "1.5.9"
+  },
+  "devDependencies": {
+    "vite": "6.x",
+    "vite-plugin-logseq": "1.x"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

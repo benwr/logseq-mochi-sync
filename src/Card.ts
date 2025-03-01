@@ -1,8 +1,3 @@
-export class Card {
-  srsId?: string;
-  deckId?: string;
-  content: string;
-}
 /**
  * Represents a flashcard to be synced with Mochi
  */
