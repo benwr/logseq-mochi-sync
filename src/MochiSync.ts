@@ -4,13 +4,13 @@ import { Card } from "./Card";
 import { CARDTAG_REGEX, CLOZE_REGEX, PROPERTY_REGEX } from "./constants";
 import { MldocOptions, PropertyPair } from "./types";
 
-// TODO: Implement content formatting for Mochi
-// - remove #card tag
-// - fix syntax for mochi:
-//   1. Template fields
-//   2. Conditional rendering
-//   3. Cloze syntax including deletion groups
-//   4. Attachment references
+// TODO:
+// During sync, we should
+// 1. Populate template from properties
+// 2. Populate deck from properties
+// 3. Populate tags from properties
+// 4. Figure out attachments from content
+// 5. Store Mochi ID as a property if it doesn't exist (so that we can avoid duplicating cards)
 
 /**
  * Extracts markdown content and properties from a block
