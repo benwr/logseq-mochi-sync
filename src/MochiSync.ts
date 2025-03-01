@@ -1,41 +1,62 @@
 import { Mldoc } from "mldoc"; // For parsing org-mode
+import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
 import { Card } from "./Card";
 import { CARDTAG_REGEX, PROPERTY_REGEX } from "./constants";
-import { path } from "@logseq/libs/dist/helpers";
+import { MldocOptions, PropertyPair } from "./types";
 
-function formatContent(content) {
-  // remove #card tag
-  // fix syntax for mochi:
-  //  1. Template fields
-  //  2. Conditional rendering
-  //  3. Various XML-ish tags (input, draw, furigana, pinyin)
-  //  4. Cloze syntax including deletion groups
-  //  5. Attachment references
+/**
+ * Formats content for Mochi compatibility
+ * 
+ * @param content - The content to format
+ * @returns Formatted content
+ */
+function formatContent(content: string): string {
+  // TODO: Implement content formatting for Mochi
+  // - remove #card tag
+  // - fix syntax for mochi:
+  //   1. Template fields
+  //   2. Conditional rendering
+  //   3. Various XML-ish tags (input, draw, furigana, pinyin)
+  //   4. Cloze syntax including deletion groups
+  //   5. Attachment references
+  
+  // For now, just remove the card tag
+  return content.replace(CARDTAG_REGEX, "");
 }
 
+/**
+ * Extracts markdown content and properties from a block
+ * 
+ * @param block - The block to process
+ * @returns A tuple of [content, properties]
+ */
 async function getMarkdownWithProperties(
-  block: any,
-): Promise<[string, [string, string][]]> {
+  block: BlockEntity
+): Promise<[string, PropertyPair[]]> {
+  // Default mldoc options for org-mode parsing
+  const options: MldocOptions = {
+    toc: false,
+    heading_number: false,
+    keep_line_break: false,
+    format: "Org",
+    heading_to_list: false,
+    exporting_keep_properties: true,
+    inline_type_with_pos: true,
+    parse_outline_only: false,
+    export_md_remove_options: [],
+    hiccup_in_block: true,
+  };
+
+  // Convert content based on format
   let result: string;
   if (block.format !== "org") {
     result = block.content;
   } else {
-    const options = {
-      toc: false,
-      heading_number: false,
-      keep_line_break: false,
-      format: "Org",
-      heading_to_list: false,
-      exporting_keep_properties: true,
-      inline_type_with_pos: true,
-      parse_outline_only: false,
-      export_md_remove_options: [],
-      hiccup_in_block: true,
-    };
-
-    let doc = Mldoc.parse(block.content, options);
-
-    let markdownContent: string[] = [];
+    // Parse org-mode content
+    const doc = Mldoc.parse(block.content, options);
+    
+    // Export to markdown
+    const markdownContent: string[] = [];
     const markdownExporter = Mldoc.Exporters.find("markdown");
     markdownExporter.export({ refs: null }, options, doc, {
       write: (chunk: string) => markdownContent.push(chunk),
@@ -43,17 +64,27 @@ async function getMarkdownWithProperties(
     });
     result = markdownContent.join("");
   }
-  let propertyPairs: [string, string][] = [];
+  
+  // Extract properties
+  const propertyPairs: PropertyPair[] = [];
   for (const match of result.matchAll(PROPERTY_REGEX)) {
-    propertyPairs.push([match[1], match[2]]);
+    propertyPairs.push({ key: match[1], value: match[2] });
   }
+  
+  // Clean up the content
   result = result.replace(CARDTAG_REGEX, "");
   result = result.replace(PROPERTY_REGEX, "");
 
   return [result, propertyPairs];
 }
 
-async function getAncestors(block: any): Promise<any[]> {
+/**
+ * Retrieves all ancestor blocks of a given block
+ * 
+ * @param block - The block to find ancestors for
+ * @returns Array of ancestor blocks
+ */
+async function getAncestors(block: BlockEntity): Promise<BlockEntity[]> {
   const result = await logseq.DB.datascriptQuery(
     `
     [
@@ -72,27 +103,50 @@ async function getAncestors(block: any): Promise<any[]> {
     return [];
   }
 
-  const parent = result[0][0];
+  const parent = result[0][0] as BlockEntity;
   const ancestors = await getAncestors(parent);
   return [...ancestors, parent];
 }
 
+/**
+ * Renders a block and all its descendants as markdown
+ * 
+ * @param block - The block to render
+ * @param level - Indentation level (0 for top level)
+ * @returns Rendered markdown content
+ */
 async function renderWithDescendants(
-  block: any,
-  level: number = 0,
+  block: BlockEntity,
+  level: number = 0
 ): Promise<string> {
   const [content, _] = await getMarkdownWithProperties(block);
+  
+  // Format current block based on level
   const currentBlockContent =
     level === 0 ? content + "\n" : "  ".repeat(level - 1) + "- " + content;
+  
+  // Return early if no children
   if (!block.children || block.children.length === 0) {
     return currentBlockContent;
   }
+  
+  // Process children recursively
   const childrenContent = await Promise.all(
-    block.children.map((child: any) => renderWithDescendants(child, level + 1)),
+    block.children.map((child: BlockEntity) => 
+      renderWithDescendants(child, level + 1)
+    )
   );
+  
+  // Combine current block with children
   return [currentBlockContent, ...childrenContent].join("\n");
 }
 
+/**
+ * Gets the title of the page containing a block
+ * 
+ * @param blockId - ID of the block
+ * @returns Page title or null if not found
+ */
 async function getPageTitle(blockId: number): Promise<string | null> {
   const result = await logseq.DB.datascriptQuery(
     `
@@ -107,57 +161,86 @@ async function getPageTitle(blockId: number): Promise<string | null> {
     `,
     blockId,
   );
+  
   if (result.length > 0 && result[0].length > 0) {
     return result[0][0]["original-name"];
   }
+  
   return null;
 }
 
-async function buildCard(block: any) {
-  let cardChunks: string[] = [];
-  let properties = {};
+/**
+ * Builds a card from a block and its context
+ * 
+ * @param block - The block to build a card from
+ * @returns A Card object
+ */
+async function buildCard(block: BlockEntity): Promise<Card> {
+  const cardChunks: string[] = [];
+  const properties: Record<string, string> = {};
 
+  // Add page title if enabled in settings
   if (logseq.settings?.includePageTitle) {
     const pageTitle = await getPageTitle(block.id);
     if (pageTitle) cardChunks.push(pageTitle);
   }
 
+  // Add ancestor blocks if enabled in settings
   if (logseq.settings?.includeAncestorBlocks) {
-    const ancestors = await Promise.all(
-      (await getAncestors(block))
-        .filter((a) => a.content)
-        .map((a) => getMarkdownWithProperties(a)),
+    const ancestors = await getAncestors(block);
+    const ancestorContents = await Promise.all(
+      ancestors
+        .filter(a => a.content)
+        .map(a => getMarkdownWithProperties(a))
     );
-    for (let ancestor of ancestors) {
-      cardChunks.push(ancestor[0]);
-      for (const [key, value] of ancestor[1]) {
+    
+    for (const [content, props] of ancestorContents) {
+      cardChunks.push(content);
+      for (const { key, value } of props) {
         properties[key] = value;
       }
     }
   }
 
+  // Add the main block content
   const [content, props] = await getMarkdownWithProperties(block);
   cardChunks.push(content);
-  for (const [key, value] of props) {
+  for (const { key, value } of props) {
     properties[key] = value;
   }
 
+  // Add children blocks if present
   if (block.children?.length > 0) {
-    for (let child of block.children) {
+    for (const child of block.children) {
       cardChunks.push("---");
-      let content = await renderWithDescendants(child, 0);
-      cardChunks.push(content);
+      const childContent = await renderWithDescendants(child, 0);
+      cardChunks.push(childContent);
     }
   }
+
+  // For debugging
   console.log(cardChunks.join("\n\n"));
   console.log(properties);
+  
+  return {
+    content: cardChunks.join("\n\n"),
+    properties
+  };
 }
 
+/**
+ * Main class for syncing Logseq cards with Mochi
+ */
 export class MochiSync {
+  /**
+   * Syncs cards from Logseq to Mochi
+   */
   async sync(): Promise<void> {
-    // Implementation of sync logic
-    let graphName = (await logseq.App.getCurrentGraph())?.name || "Default";
-    let cards: Card[] = [];
+    // Get current graph name
+    const graphName = (await logseq.App.getCurrentGraph())?.name || "Default";
+    const cards: Card[] = [];
+    
+    // Find all blocks with #card tag
     const cardBlocks = await logseq.DB.datascriptQuery(
       `
       [
@@ -170,11 +253,19 @@ export class MochiSync {
     `,
     );
 
+    // Process each card block
     for (const [block] of cardBlocks) {
-      let expandedBlock = await logseq.Editor.getBlock(block.id, {
+      // Get full block with children
+      const expandedBlock = await logseq.Editor.getBlock(block.id, {
         includeChildren: true,
       });
-      cards.push(await buildCard(expandedBlock));
+      
+      // Build card and add to collection
+      const card = await buildCard(expandedBlock);
+      cards.push(card);
     }
+    
+    // TODO: Send cards to Mochi API
+    console.log(`Found ${cards.length} cards in graph "${graphName}"`);
   }
 }

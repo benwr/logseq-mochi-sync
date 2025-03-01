@@ -1,18 +1,29 @@
 import "@logseq/libs";
 import { LSPluginBaseInfo } from "@logseq/libs/dist/LSPlugin";
-import { MochiSync } from "./MochiSync";
 import { SettingSchemaDesc } from "@logseq/libs/dist/LSPlugin";
+import { MochiSync } from "./MochiSync";
 import { MOCHI_LOGO } from "./constants";
 
-const syncWithMochi = async function () {
-  console.log("Syncing");
+/**
+ * Syncs cards from Logseq to Mochi
+ */
+const syncWithMochi = async (): Promise<void> => {
+  console.log("Starting Mochi sync...");
   await new MochiSync().sync();
 };
 
-function main(baseInfo: LSPluginBaseInfo) {
+/**
+ * Main plugin initialization function
+ * 
+ * @param baseInfo - Plugin base information
+ */
+function main(baseInfo: LSPluginBaseInfo): void {
+  // Register model for UI interaction
   logseq.provideModel({
-    syncWithMochi: syncWithMochi,
+    syncWithMochi,
   });
+  
+  // Register command palette entry
   logseq.App.registerCommandPalette(
     {
       key: `logseq-mochi-sync-${baseInfo.id}`,
@@ -22,15 +33,17 @@ function main(baseInfo: LSPluginBaseInfo) {
     syncWithMochi,
   );
 
+  // Register toolbar button
   logseq.App.registerUIItem("toolbar", {
     key: baseInfo.id,
     template: `
-      <a title="Mochi Sync" class="button relative" data-on-click="syncWithMochi" class="button">
+      <a title="Mochi Sync" class="button relative" data-on-click="syncWithMochi">
         <span class="ui__icon ti" style="font-size: 18px;">${MOCHI_LOGO}</span>
       </a>
     `,
   });
 
+  // Define plugin settings
   const settingsTemplate: SettingSchemaDesc[] = [
     {
       key: "mochiApiKey",
@@ -74,7 +87,10 @@ function main(baseInfo: LSPluginBaseInfo) {
       description: "The default deck name to use for the card.",
     },
   ];
+  
+  // Register settings schema
   logseq.useSettingsSchema(settingsTemplate);
 }
 
+// Initialize plugin
 logseq.ready(main).catch(console.error);
