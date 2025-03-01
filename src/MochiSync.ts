@@ -84,6 +84,9 @@ async function getMarkdownWithProperties(
   // Convert Logseq cloze format to Mochi format
   result = result.replace(CLOZE_REGEX, "{{$1}}");
 
+  // Escape double square brackets to prevent Mochi from interpreting them as links
+  result = result.replace(/(?<!\\)(\[\[|\]\])/g, "\\$1");
+
   // Add a newline at the end if there isn't one
   if (!result.endsWith("\n")) {
     result += "\n";
