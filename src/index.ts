@@ -83,8 +83,8 @@ function main(baseInfo: LSPluginBaseInfo): void {
       key: "Default Deck",
       type: "string",
       default: "",
-      title: "Default Deck ID",
-      description: "The default Mochi deck ID to use for cards (find this in Mochi's deck settings).",
+      title: "Default Deck Name",
+      description: "Name of default Mochi deck (will be created if it doesn't exist)",
     },
     {
       key: "syncDeletedCards",

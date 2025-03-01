@@ -317,6 +317,80 @@ export class MochiSync {
   }
 
   /**
+   * Fetches all decks from Mochi API
+   *
+   * @returns Array of Mochi decks
+   * @throws Error if API key is not configured or API request fails
+   */
+  private async fetchDecks(): Promise<MochiDeck[]> {
+    const apiKey = logseq.settings?.mochiApiKey;
+    if (!apiKey) throw new Error("Mochi API key not configured");
+
+    const decks: MochiDeck[] = [];
+    let bookmark: string | null = null;
+
+    do {
+      const url = new URL("https://app.mochi.cards/api/decks");
+      if (bookmark) url.searchParams.set("bookmark", bookmark);
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Basic ${btoa(apiKey + ":")}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Mochi API error (${response.status}): ${errorText}`);
+      }
+
+      const data = await response.json();
+      if (!data.docs || data.docs.length === 0) break;
+
+      decks.push(...data.docs);
+      bookmark = data.bookmark || null;
+    } while (bookmark);
+
+    return decks;
+  }
+
+  /**
+   * Gets or creates a deck with the specified name
+   *
+   * @param deckName - The name of the deck to find or create
+   * @returns The ID of the deck
+   * @throws Error if API key is not configured or API request fails
+   */
+  private async getOrCreateDeck(deckName: string): Promise<string> {
+    // Check existing decks
+    const decks = await this.fetchDecks();
+    const existingDeck = decks.find(d => d.name === deckName);
+    if (existingDeck) return existingDeck.id;
+
+    // Create new deck if not found
+    const apiKey = logseq.settings?.mochiApiKey;
+    if (!apiKey) throw new Error("Mochi API key not configured");
+
+    const response = await fetch("https://app.mochi.cards/api/decks", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${btoa(apiKey + ":")}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name: deckName }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create deck: ${errorText}`);
+    }
+
+    const newDeck = await response.json();
+    return newDeck.id;
+  }
+
+  /**
    * Creates a new card in Mochi
    *
    * @param card - The card to create
@@ -330,8 +404,11 @@ export class MochiSync {
     // Determine which deck to use
     let deckId = card.deckId;
     if (!deckId) {
-      deckId = logseq.settings?.["Default Deck"];
-      if (!deckId) throw new Error("Default deck not configured");
+      const defaultDeckName = logseq.settings?.["Default Deck"];
+      if (!defaultDeckName) throw new Error("Default deck name not configured");
+      
+      // Get or create the deck by name
+      deckId = await this.getOrCreateDeck(defaultDeckName);
     }
 
     // Prepare tags (always include 'logseq' tag)

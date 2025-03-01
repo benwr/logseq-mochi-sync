@@ -11,6 +11,13 @@ export interface Card {
   mochiId?: string;
 }
 
+export interface MochiDeck {
+  id: string;
+  name: string;
+  "parent-id"?: string;
+  sort?: number;
+}
+
 export interface MldocOptions {
   toc: boolean;
   heading_number: boolean;
