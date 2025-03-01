@@ -1,8 +1,8 @@
+import "@logseq/libs";
 import { Mldoc } from "mldoc"; // For parsing org-mode
 import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
-import { Card } from "./Card";
 import { CARDTAG_REGEX, CLOZE_REGEX, PROPERTY_REGEX } from "./constants";
-import { MldocOptions, PropertyPair } from "./types";
+import { Card, MldocOptions, PropertyPair } from "./types";
 
 /**
  * Interface for Mochi API card responses
@@ -83,7 +83,7 @@ async function getMarkdownWithProperties(
 
   // Convert Logseq cloze format to Mochi format
   result = result.replace(CLOZE_REGEX, "{{$1}}");
-  
+
   // Add a newline at the end if there isn't one
   if (!result.endsWith("\n")) {
     result += "\n";
@@ -250,7 +250,9 @@ async function buildCard(block: BlockEntity): Promise<Card> {
   // Extract Mochi-specific properties
   const mochiId = properties["mochiId"] || undefined;
   const deckId = properties["deckId"] || undefined;
-  const tags = properties["tags"] ? properties["tags"].split(",").map(t => t.trim()) : undefined;
+  const tags = properties["tags"]
+    ? properties["tags"].split(",").map((t) => t.trim())
+    : undefined;
 
   return {
     content: cardChunks.join("\n\n"),
@@ -267,42 +269,48 @@ async function buildCard(block: BlockEntity): Promise<Card> {
 export class MochiSync {
   /**
    * Fetches all cards from Mochi API that have the 'logseq' tag
-   * 
+   *
    * @returns Array of Mochi cards
    * @throws Error if API key is not configured or API request fails
    */
   private async fetchMochiCards(): Promise<MochiCard[]> {
     const apiKey = logseq.settings?.mochiApiKey;
-    if (!apiKey) throw new Error('Mochi API key not configured');
+    if (!apiKey) throw new Error("Mochi API key not configured");
 
     const mochiCards: MochiCard[] = [];
     let bookmark: string | null = null;
 
     do {
-      const url = new URL('https://app.mochi.cards/api/cards');
-      if (bookmark) url.searchParams.set('bookmark', bookmark);
+      const url = new URL("https://app.mochi.cards/api/cards");
+      if (bookmark) url.searchParams.set("bookmark", bookmark);
+      console.log(bookmark);
 
       const response = await fetch(url.toString(), {
         headers: {
-          Authorization: `Basic ${btoa(apiKey + ':')}`,
-          Accept: 'application/json',
+          Authorization: `Basic ${btoa(apiKey + ":")}`,
+          Accept: "application/json",
         },
       });
+      console.log("made request; got response: ", response);
 
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Mochi API error (${response.status}): ${errorText}`);
       }
 
-      const data = await response.json() as MochiApiResponse;
-      
+      const data = (await response.json()) as MochiApiResponse;
+      if (!data || !data.docs || data.docs.length === 0) {
+        break;
+      }
+
       // Filter cards that have the 'logseq' tag
-      const logseqCards = data.docs.filter(card => 
-        card["manual-tags"]?.includes('logseq')
+      const logseqCards = data.docs.filter((card) =>
+        card["manual-tags"]?.includes("logseq"),
       );
-      
+
       mochiCards.push(...logseqCards);
       bookmark = data.bookmark || null;
+      console.log(bookmark);
     } while (bookmark);
 
     return mochiCards;
@@ -310,99 +318,105 @@ export class MochiSync {
 
   /**
    * Creates a new card in Mochi
-   * 
+   *
    * @param card - The card to create
    * @returns The ID of the created card
    * @throws Error if API key is not configured or API request fails
    */
   private async createMochiCard(card: Card): Promise<string> {
     const apiKey = logseq.settings?.mochiApiKey;
-    if (!apiKey) throw new Error('Mochi API key not configured');
-    
+    if (!apiKey) throw new Error("Mochi API key not configured");
+
     // Determine which deck to use
     let deckId = card.deckId;
     if (!deckId) {
-      deckId = logseq.settings?.['Default Deck'];
-      if (!deckId) throw new Error('Default deck not configured');
+      deckId = logseq.settings?.["Default Deck"];
+      if (!deckId) throw new Error("Default deck not configured");
     }
 
     // Prepare tags (always include 'logseq' tag)
-    const tags = [...(card.tags || []), 'logseq'];
+    const tags = [...(card.tags || []), "logseq"];
 
-    const response = await fetch('https://app.mochi.cards/api/cards', {
-      method: 'POST',
+    const response = await fetch("https://app.mochi.cards/api/cards", {
+      method: "POST",
       headers: {
-        Authorization: `Basic ${btoa(apiKey + ':')}`,
-        'Content-Type': 'application/json',
+        Authorization: `Basic ${btoa(apiKey + ":")}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         content: card.content,
-        'deck-id': deckId,
-        'manual-tags': tags,
+        "deck-id": deckId,
+        "manual-tags": tags,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to create card (${response.status}): ${errorText}`);
+      throw new Error(
+        `Failed to create card (${response.status}): ${errorText}`,
+      );
     }
-    
+
     const data = await response.json();
     return data.id;
   }
 
   /**
    * Updates an existing card in Mochi
-   * 
+   *
    * @param id - The ID of the card to update
    * @param card - The updated card data
    * @throws Error if API key is not configured or API request fails
    */
   private async updateMochiCard(id: string, card: Card): Promise<void> {
     const apiKey = logseq.settings?.mochiApiKey;
-    if (!apiKey) throw new Error('Mochi API key not configured');
+    if (!apiKey) throw new Error("Mochi API key not configured");
 
     // Prepare tags (always include 'logseq' tag)
-    const tags = [...(card.tags || []), 'logseq'];
+    const tags = [...(card.tags || []), "logseq"];
 
     const response = await fetch(`https://app.mochi.cards/api/cards/${id}`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        Authorization: `Basic ${btoa(apiKey + ':')}`,
-        'Content-Type': 'application/json',
+        Authorization: `Basic ${btoa(apiKey + ":")}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         content: card.content,
-        'manual-tags': tags,
+        "manual-tags": tags,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to update card (${response.status}): ${errorText}`);
+      throw new Error(
+        `Failed to update card (${response.status}): ${errorText}`,
+      );
     }
   }
 
   /**
    * Deletes a card from Mochi
-   * 
+   *
    * @param id - The ID of the card to delete
    * @throws Error if API key is not configured or API request fails
    */
   private async deleteMochiCard(id: string): Promise<void> {
     const apiKey = logseq.settings?.mochiApiKey;
-    if (!apiKey) throw new Error('Mochi API key not configured');
+    if (!apiKey) throw new Error("Mochi API key not configured");
 
     const response = await fetch(`https://app.mochi.cards/api/cards/${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
       headers: {
-        Authorization: `Basic ${btoa(apiKey + ':')}`,
+        Authorization: `Basic ${btoa(apiKey + ":")}`,
       },
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to delete card (${response.status}): ${errorText}`);
+      throw new Error(
+        `Failed to delete card (${response.status}): ${errorText}`,
+      );
     }
   }
 
@@ -412,36 +426,40 @@ export class MochiSync {
   async sync(): Promise<void> {
     // Check for API key
     if (!logseq.settings?.mochiApiKey) {
-      logseq.UI.showMsg('Mochi API key not configured. Please add it in plugin settings.', 'error');
+      logseq.UI.showMsg(
+        "Mochi API key not configured. Please add it in plugin settings.",
+        "error",
+      );
       return;
     }
 
     try {
       // Show sync starting message
-      logseq.UI.showMsg('Starting sync with Mochi...', 'info');
-      
+      logseq.UI.showMsg("Starting sync with Mochi...", "info");
+
       // Get current graph name
       const graphName = (await logseq.App.getCurrentGraph())?.name || "Default";
-      
+
       // Fetch cards from Mochi and find all blocks with #card tag in parallel
       const [mochiCards, cardBlocks] = await Promise.all([
         this.fetchMochiCards(),
         logseq.DB.datascriptQuery(`
           [:find (pull ?b [*])
            :where [?t :block/name "card"] [?b :block/refs ?t]]
-        `)
+        `),
       ]);
+      console.log(mochiCards.length, cardBlocks.length);
 
       // Create a map of Mochi card IDs to cards
-      const mochiCardMap = new Map(mochiCards.map(c => [c.id, c]));
-      
+      const mochiCardMap = new Map(mochiCards.map((c) => [c.id, c]));
+
       // Keep track of Mochi IDs that exist in Logseq
       const logseqMochiIds = new Set<string>();
-      
+
       // Process each card block
-      const processedCards: Card[] = [];
-      const createdCards: number = 0;
-      const updatedCards: number = 0;
+      let processedCards: Card[] = [];
+      let createdCards: number = 0;
+      let updatedCards: number = 0;
 
       for (const [block] of cardBlocks) {
         // Get full block with children
@@ -454,11 +472,11 @@ export class MochiSync {
         // Build card and add to collection
         const card = await buildCard(expandedBlock);
         processedCards.push(card);
-        
+
         // Check if this card already has a Mochi ID
         if (card.mochiId) {
           logseqMochiIds.add(card.mochiId);
-          
+
           // Check if the card exists in Mochi and needs updating
           const existingCard = mochiCardMap.get(card.mochiId);
           if (existingCard) {
@@ -469,21 +487,29 @@ export class MochiSync {
           } else {
             // Card exists in Logseq but not in Mochi - create it
             const newId = await this.createMochiCard(card);
-            await logseq.Editor.upsertBlockProperty(expandedBlock.uuid, 'mochiId', newId);
+            await logseq.Editor.upsertBlockProperty(
+              expandedBlock.uuid,
+              "mochiId",
+              newId,
+            );
             logseqMochiIds.add(newId);
             createdCards++;
           }
         } else {
           // New card - create in Mochi
           const newId = await this.createMochiCard(card);
-          await logseq.Editor.upsertBlockProperty(expandedBlock.uuid, 'mochiId', newId);
+          await logseq.Editor.upsertBlockProperty(
+            expandedBlock.uuid,
+            "mochiId",
+            newId,
+          );
           logseqMochiIds.add(newId);
           createdCards++;
         }
       }
 
       // Find and delete orphaned Mochi cards (cards in Mochi but not in Logseq)
-      const orphanedCards = mochiCards.filter(c => !logseqMochiIds.has(c.id));
+      const orphanedCards = mochiCards.filter((c) => !logseqMochiIds.has(c.id));
       for (const card of orphanedCards) {
         await this.deleteMochiCard(card.id);
       }
@@ -491,13 +517,15 @@ export class MochiSync {
       // Show success message
       logseq.UI.showMsg(
         `Sync complete: ${createdCards} created, ${updatedCards} updated, ${orphanedCards.length} deleted`,
-        'success'
+        "success",
       );
-      
-      console.log(`Synced ${processedCards.length} cards from graph "${graphName}" to Mochi`);
+
+      console.log(
+        `Synced ${processedCards.length} cards from graph "${graphName}" to Mochi`,
+      );
     } catch (error) {
-      console.error('Sync error:', error);
-      logseq.UI.showMsg(`Sync failed: ${error.message}`, 'error');
+      console.error("Sync error:", error);
+      logseq.UI.showMsg(`Sync failed: ${error.message}`, "error");
     }
   }
 }
