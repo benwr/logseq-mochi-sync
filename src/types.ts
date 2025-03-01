@@ -1,5 +1,3 @@
-import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
-
 export interface PropertyPair {
   key: string;
   value: string;
@@ -32,6 +30,6 @@ export interface MldocExporter {
     writer: {
       write: (chunk: string) => void;
       end: () => void;
-    }
+    },
   ) => void;
 }
