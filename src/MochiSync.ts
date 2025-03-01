@@ -1,7 +1,7 @@
 import { Mldoc } from "mldoc"; // For parsing org-mode
 import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
 import { Card } from "./Card";
-import { CARDTAG_REGEX, PROPERTY_REGEX } from "./constants";
+import { CARDTAG_REGEX, CLOZE_REGEX, PROPERTY_REGEX } from "./constants";
 import { MldocOptions, PropertyPair } from "./types";
 
 // TODO: Implement content formatting for Mochi
@@ -62,7 +62,7 @@ async function getMarkdownWithProperties(
   // Clean up the content and convert formats
   result = result.replace(CARDTAG_REGEX, "");
   result = result.replace(PROPERTY_REGEX, "");
-  
+
   // Convert Logseq cloze format to Mochi format
   result = result.replace(CLOZE_REGEX, "{{$1}}");
 

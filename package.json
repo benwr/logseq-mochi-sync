@@ -7,7 +7,7 @@
   "main": "dist/index.html",
   "scripts": {
     "build": "vite build",
-    "serve": "vite"
+    "serve": "vite build --watch"
   },
   "logseq": {
     "id": "_c4uiessg7"
