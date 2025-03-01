@@ -82,9 +82,16 @@ function main(baseInfo: LSPluginBaseInfo): void {
     {
       key: "Default Deck",
       type: "string",
-      default: "Logseq",
-      title: "Default Deck",
-      description: "The default deck name to use for the card.",
+      default: "",
+      title: "Default Deck ID",
+      description: "The default Mochi deck ID to use for cards (find this in Mochi's deck settings).",
+    },
+    {
+      key: "syncDeletedCards",
+      type: "boolean",
+      default: true,
+      title: "Delete Orphaned Cards",
+      description: "Delete cards from Mochi that no longer exist in Logseq.",
     },
   ];
   

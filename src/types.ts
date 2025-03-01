@@ -6,7 +6,9 @@ export interface PropertyPair {
 export interface Card {
   content: string;
   properties: Record<string, string>;
-  // Add more fields as needed
+  deckId?: string;
+  tags?: string[];
+  mochiId?: string;
 }
 
 export interface MldocOptions {

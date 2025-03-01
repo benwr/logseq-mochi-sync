@@ -4,5 +4,7 @@
 export interface Card {
   content: string;
   properties: Record<string, string>;
-  // Add more fields as needed for Mochi API integration
+  deckId?: string;
+  tags?: string[];
+  mochiId?: string;
 }
