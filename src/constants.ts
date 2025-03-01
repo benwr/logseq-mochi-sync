@@ -11,4 +11,4 @@ export const MOCHI_LOGO = `
  */
 export const PROPERTY_REGEX = /\n([A-Za-z0-9\?\-]+)::\s*(.*)$/gm;
 export const CARDTAG_REGEX = /#card */g;
-export const CLOZE_REGEX = /\{\{cloze (\d+::)?(.*)\}\}/gm;
+export const CLOZE_REGEX = /\{\{cloze (.*)\}\}/gm;
