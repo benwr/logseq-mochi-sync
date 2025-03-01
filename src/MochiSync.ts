@@ -2,7 +2,7 @@ import "@logseq/libs";
 import { Mldoc } from "mldoc"; // For parsing org-mode
 import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
 import { CARDTAG_REGEX, CLOZE_REGEX, PROPERTY_REGEX } from "./constants";
-import { Card, MldocOptions, PropertyPair } from "./types";
+import { Card, MldocOptions, MochiDeck, PropertyPair } from "./types";
 
 /**
  * Interface for Mochi API card responses
@@ -365,7 +365,7 @@ export class MochiSync {
   private async getOrCreateDeck(deckName: string): Promise<string> {
     // Check existing decks
     const decks = await this.fetchDecks();
-    const existingDeck = decks.find(d => d.name === deckName);
+    const existingDeck = decks.find((d) => d.name === deckName);
     if (existingDeck) return existingDeck.id;
 
     // Create new deck if not found
@@ -406,7 +406,7 @@ export class MochiSync {
     if (!deckId) {
       const defaultDeckName = logseq.settings?.["Default Deck"];
       if (!defaultDeckName) throw new Error("Default deck name not configured");
-      
+
       // Get or create the deck by name
       deckId = await this.getOrCreateDeck(defaultDeckName);
     }
