@@ -59,9 +59,12 @@ async function getMarkdownWithProperties(
     propertyPairs.push({ key: match[1], value: match[2] });
   }
 
-  // Clean up the content
+  // Clean up the content and convert formats
   result = result.replace(CARDTAG_REGEX, "");
   result = result.replace(PROPERTY_REGEX, "");
+  
+  // Convert Logseq cloze format to Mochi format
+  result = result.replace(CLOZE_REGEX, "{{$1}}");
 
   return [result, propertyPairs];
 }
