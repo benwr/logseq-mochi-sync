@@ -2,7 +2,7 @@ import { Mldoc } from "mldoc"; // For parsing org-mode
 import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
 import { Card } from "./Card";
 import { CARDTAG_REGEX, PROPERTY_REGEX } from "./constants";
-import { MldocOptions, PropertyPair } from "./types";
+import { BlockUUIDTuple, MldocOptions, PropertyPair } from "./types";
 
 /**
  * Formats content for Mochi compatibility
@@ -132,9 +132,15 @@ async function renderWithDescendants(
   
   // Process children recursively
   const childrenContent = await Promise.all(
-    block.children.map((child: BlockEntity) => 
-      renderWithDescendants(child, level + 1)
-    )
+    block.children.map(async (child) => {
+      // If child is a UUID tuple, fetch the actual block
+      const childBlock = Array.isArray(child) 
+        ? await logseq.Editor.getBlock(child[0])
+        : child;
+        
+      if (!childBlock) return "";
+      return renderWithDescendants(childBlock, level + 1);
+    })
   );
   
   // Combine current block with children
@@ -212,8 +218,15 @@ async function buildCard(block: BlockEntity): Promise<Card> {
   // Add children blocks if present
   if (block.children?.length > 0) {
     for (const child of block.children) {
+      // If child is a UUID tuple, fetch the actual block
+      const childBlock = Array.isArray(child) 
+        ? await logseq.Editor.getBlock(child[0])
+        : child;
+        
+      if (!childBlock) continue;
+      
       cardChunks.push("---");
-      const childContent = await renderWithDescendants(child, 0);
+      const childContent = await renderWithDescendants(childBlock, 0);
       cardChunks.push(childContent);
     }
   }

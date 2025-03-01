@@ -1,3 +1,5 @@
+import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
+
 export interface PropertyPair {
   key: string;
   value: string;
@@ -8,6 +10,8 @@ export interface Card {
   properties: Record<string, string>;
   // Add more fields as needed
 }
+
+export type BlockUUIDTuple = [string, number]; // [uuid, time]
 
 export interface MldocOptions {
   toc: boolean;
