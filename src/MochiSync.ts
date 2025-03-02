@@ -1,7 +1,12 @@
 import "@logseq/libs";
 import { Mldoc } from "mldoc"; // For parsing org-mode
 import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
-import { CARDTAG_REGEX, CLOZE_REGEX, PROPERTY_REGEX } from "./constants";
+import {
+  CARDTAG_REGEX,
+  CLOZE_REGEX,
+  PROPERTY_REGEX,
+  SYNC_MSG_KEY,
+} from "./constants";
 import {
   Card,
   MldocOptions,
@@ -12,11 +17,15 @@ import {
 } from "./types";
 
 // TODO:
-// During sync, we should
-// 1. Improve GUI: Show "syncing" message until sync is complete
-// 2. Populate tags from properties
-// 3. Figure out attachments from content
-// 4. Populate template and fields from properties? This may be hard.
+// During sync, we should maybe try to add attachments.
+// This will likely be quite annoying to do properly, since it will involve:
+// 1. Identifying media to attach
+// 2. Ensuring that that media is <5MiB in size
+// 3. Creating the card with placeholder content, since we can't predict the uploaded content URI
+// 4. Uploading the media as an attachment
+// 5. Updating the card with the real attachment URL
+// 6. Somehow reconciling content differences, in order to avoid updates on every sync.
+// I think this is actually not possible, since the mochi API provides no way of knowing whether the media has changed since uploading.
 
 /**
  * Extracts markdown content and properties from a block
@@ -538,7 +547,10 @@ export class MochiSync {
 
     try {
       // Show sync starting message
-      logseq.UI.showMsg("Starting sync with Mochi...", "info");
+      await logseq.UI.showMsg("Syncing with Mochi...", "info", {
+        key: SYNC_MSG_KEY,
+        timeout: 1000000,
+      });
 
       // Fetch cards from Mochi, and find all blocks with #card tag
       const [mochiCards, cardBlocks] = await Promise.all([
@@ -709,6 +721,7 @@ export class MochiSync {
         }
       }
 
+      logseq.UI.closeMsg(SYNC_MSG_KEY);
       // Show success message
       logseq.UI.showMsg(
         `Sync complete: ${createdCards} created, ${updatedCards} updated, ${orphanedCards} deleted`,
