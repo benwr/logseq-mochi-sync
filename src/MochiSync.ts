@@ -611,11 +611,15 @@ export class MochiSync {
         }
       }
 
-      // Phase 5: Create cards that exist in logseq but not Mochi
+      // Phase 5: Create/Recreate cards that need to exist in Mochi
       let createdCards = 0;
+      const mochiCardIds = new Set(mochiCards.map(card => card.id));
+
       for (const [block] of cardBlocks) {
-        // Skip blocks that already have a Mochi ID
-        if (block.properties?.["mochi-id"]) continue;
+        const existingMochiId = block.properties?.["mochi-id"];
+        
+        // Skip blocks where ID exists in both systems (handled in Phase 6)
+        if (existingMochiId && mochiCardIds.has(existingMochiId)) continue;
 
         try {
           // Expand block with children content
@@ -630,7 +634,7 @@ export class MochiSync {
           // Create card in Mochi and get new ID
           const newId = await this.createMochiCard(card, deckMap);
           
-          // Store Mochi ID in block properties
+          // Update mochi-id property regardless of previous value
           await logseq.Editor.upsertBlockProperty(
             block.uuid,
             "mochi-id",
