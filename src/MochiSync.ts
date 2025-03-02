@@ -452,9 +452,9 @@ export class MochiSync {
    * @throws Error if API key is not configured or API request fails
    */
   private async updateMochiCard(
-    id: string, 
+    id: string,
     card: Card,
-    deckMap: Map<string, string>
+    deckMap: Map<string, string>,
   ): Promise<void> {
     const apiKey = logseq.settings?.mochiApiKey;
     if (!apiKey) throw new Error("Mochi API key not configured");
@@ -464,7 +464,8 @@ export class MochiSync {
     if (card.deckname && deckMap.has(card.deckname)) {
       deckId = deckMap.get(card.deckname);
     } else {
-      const defaultDeckname: string | undefined = logseq.settings?.["Default Deck"];
+      const defaultDeckname: string | undefined =
+        logseq.settings?.["Default Deck"];
       if (defaultDeckname && deckMap.has(defaultDeckname)) {
         deckId = deckMap.get(defaultDeckname);
       }
@@ -633,13 +634,16 @@ export class MochiSync {
 
           if (existingCard) {
             // Resolve current deck ID for comparison
-            const currentDeckId = card.deckname && deckMap.has(card.deckname)
-              ? deckMap.get(card.deckname)
-              : (logseq.settings?.["Default Deck"] && deckMap.has(logseq.settings?.["Default Deck"]) 
-                  ? deckMap.get(logseq.settings?.["Default Deck"]) 
-                  : undefined);
-              
-            const deckChanged = currentDeckId && existingCard["deck-id"] !== currentDeckId;
+            const currentDeckId =
+              card.deckname && deckMap.has(card.deckname)
+                ? deckMap.get(card.deckname)
+                : logseq.settings?.["Default Deck"] &&
+                    deckMap.has(logseq.settings?.["Default Deck"])
+                  ? deckMap.get(logseq.settings?.["Default Deck"])
+                  : undefined;
+
+            const deckChanged =
+              currentDeckId && existingCard["deck-id"] !== currentDeckId;
             const contentChanged = existingCard.content !== card.content;
 
             if (deckChanged || contentChanged) {
@@ -687,6 +691,9 @@ export class MochiSync {
 
       console.log(
         `Synced ${processedCards.length} cards from graph "${graphName}" to Mochi`,
+      );
+      console.log(
+        `Sync complete: ${createdCards} created, ${updatedCards} updated, ${orphanedCards.length} deleted`,
       );
     } catch (error) {
       console.error("Sync error:", error);
