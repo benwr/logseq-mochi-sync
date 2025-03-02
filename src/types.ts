@@ -50,6 +50,8 @@ export interface MochiCard {
   content: string;
   "deck-id": string;
   "manual-tags"?: string[];
+  "trashed?"?: string;
+  "archived?"?: boolean;
 }
 
 /**

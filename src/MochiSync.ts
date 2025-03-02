@@ -448,11 +448,31 @@ export class MochiSync {
    *
    * @param id - The ID of the card to update
    * @param card - The updated card data
+   * @param deckMap - Map of deck names to deck IDs
    * @throws Error if API key is not configured or API request fails
    */
-  private async updateMochiCard(id: string, card: Card): Promise<void> {
+  private async updateMochiCard(
+    id: string, 
+    card: Card,
+    deckMap: Map<string, string>
+  ): Promise<void> {
     const apiKey = logseq.settings?.mochiApiKey;
     if (!apiKey) throw new Error("Mochi API key not configured");
+
+    // Resolve deck ID from pre-built map
+    let deckId: string | undefined;
+    if (card.deckname && deckMap.has(card.deckname)) {
+      deckId = deckMap.get(card.deckname);
+    } else {
+      const defaultDeckname: string | undefined = logseq.settings?.["Default Deck"];
+      if (defaultDeckname && deckMap.has(defaultDeckname)) {
+        deckId = deckMap.get(defaultDeckname);
+      }
+    }
+
+    if (!deckId) {
+      throw new Error("No valid deck ID found for card update");
+    }
 
     // Prepare tags (always include 'logseq' tag)
     const tags = [...(card.tags || []), "logseq"];
@@ -465,6 +485,7 @@ export class MochiSync {
       },
       body: JSON.stringify({
         content: card.content,
+        "deck-id": deckId, // Include deck-id in the update
         "manual-tags": tags,
       }),
     });
@@ -611,8 +632,18 @@ export class MochiSync {
           const existingCard = mochiCardMap.get(mochiId);
 
           if (existingCard) {
-            if (existingCard.content !== card.content) {
-              await this.updateMochiCard(mochiId, card);
+            // Resolve current deck ID for comparison
+            const currentDeckId = card.deckname && deckMap.has(card.deckname)
+              ? deckMap.get(card.deckname)
+              : (logseq.settings?.["Default Deck"] && deckMap.has(logseq.settings?.["Default Deck"]) 
+                  ? deckMap.get(logseq.settings?.["Default Deck"]) 
+                  : undefined);
+              
+            const deckChanged = currentDeckId && existingCard["deck-id"] !== currentDeckId;
+            const contentChanged = existingCard.content !== card.content;
+
+            if (deckChanged || contentChanged) {
+              await this.updateMochiCard(mochiId, card, deckMap);
               updatedCards++;
             }
           } else {
