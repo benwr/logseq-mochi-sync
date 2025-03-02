@@ -13,7 +13,3 @@ export const PROPERTY_REGEX = /^([A-Za-z0-9\?\-]+)::\s*(.*)/;
 export const CARDTAG_REGEX = /#card */g;
 export const CLOZE_REGEX = /\{\{cloze (.*?)\}\}/gm;
 
-/**
- * Storage key for Mochi ID map
- */
-export const MOCHI_ID_MAP_KEY = "mochiIdMap";

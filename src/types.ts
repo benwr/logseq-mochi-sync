@@ -8,6 +8,7 @@ export interface Card {
   properties: Record<string, string>;
   deckname?: string;
   tags?: string[];
+  mochiId?: string;
 }
 
 export interface MochiDeck {
