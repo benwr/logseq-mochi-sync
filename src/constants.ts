@@ -9,7 +9,7 @@ export const MOCHI_LOGO = `
 /**
  * Regular expressions for parsing content
  */
-export const PROPERTY_REGEX = /^([A-Za-z0-9\?\-]+)::\s*(.*)$/gm;
+export const PROPERTY_REGEX = /^([A-Za-z0-9\?\-]+)::\s*(.*)/;
 export const CARDTAG_REGEX = /#card */g;
 export const CLOZE_REGEX = /\{\{cloze (.*?)\}\}/gm;
 

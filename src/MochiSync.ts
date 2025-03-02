@@ -69,12 +69,13 @@ async function getMarkdownWithProperties(
   const propertyPairs: PropertyPair[] = [];
 
   for (const line of lines) {
-    const propMatch = line.match(PROPERTY_REGEX);
+    const propMatch = PROPERTY_REGEX.exec(line);
     if (propMatch) {
       // Extract property and skip this line
+      const value = propMatch[2] ? propMatch[2].trim() : '';
       propertyPairs.push({
-        key: propMatch[1],
-        value: propMatch[2].trim()
+        key: propMatch[1].trim(),
+        value
       });
     } else {
       // Keep non-property lines
