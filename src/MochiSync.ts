@@ -312,6 +312,7 @@ export class MochiSync {
       mochiCards.push(...logseqCards);
       bookmark = data.bookmark || null;
     } while (bookmark);
+    console.log(`Received ${mochiCards.length} cards tagged #logseq`);
 
     return mochiCards;
   }
@@ -613,6 +614,7 @@ export class MochiSync {
       let processedCards: Card[] = [];
       let createdCards: number = 0;
       let updatedCards: number = 0;
+      console.log(JSON.parse(JSON.stringify(idMap)));
 
       for (const [block] of cardBlocks) {
         // Get full block with children
@@ -626,7 +628,7 @@ export class MochiSync {
         const card = await buildCard(expandedBlock);
         processedCards.push(card);
 
-        const mochiId = idMap[expandedBlock.uuid];
+        const mochiId = idMap[expandedBlock.id];
 
         if (mochiId) {
           logseqMochiIds.add(mochiId);
@@ -653,14 +655,15 @@ export class MochiSync {
           } else {
             // Stale ID - create new card
             const newId = await this.createMochiCard(card, deckMap);
-            idMap[expandedBlock.uuid] = newId;
+            idMap[expandedBlock.id] = newId;
             logseqMochiIds.add(newId);
             createdCards++;
           }
         } else {
+          console.log("new block on the kid: ", block, expandedBlock, card);
           // New card
           const newId = await this.createMochiCard(card, deckMap);
-          idMap[expandedBlock.uuid] = newId;
+          idMap[expandedBlock.id] = newId;
           logseqMochiIds.add(newId);
           createdCards++;
         }
