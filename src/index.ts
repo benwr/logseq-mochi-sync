@@ -14,14 +14,17 @@ const syncWithMochi = async (): Promise<void> => {
 
 /**
  * Main plugin initialization function
- * 
+ *
  * @param baseInfo - Plugin base information
  */
 function main(baseInfo: LSPluginBaseInfo): void {
   // Add CSS to hide mochi-id property in UI
   logseq.provideStyle(`
-    div.properties div[data-ref="mochi-id"] {
-      display: none !important;
+    div:has(> div > a.page-property-key[data-ref="mochi-id"]) {
+      display: none;
+    }
+    div:has(> div:only-child > div > a.page-property-key[data-ref="mochi-id"]) {
+      display: none;
     }
   `);
 
@@ -29,7 +32,7 @@ function main(baseInfo: LSPluginBaseInfo): void {
   logseq.provideModel({
     syncWithMochi,
   });
-  
+
   // Register command palette entry
   logseq.App.registerCommandPalette(
     {
@@ -91,7 +94,8 @@ function main(baseInfo: LSPluginBaseInfo): void {
       type: "string",
       default: "",
       title: "Default Deck Name",
-      description: "Name of default Mochi deck (will be created if it doesn't exist)",
+      description:
+        "Name of default Mochi deck (will be created if it doesn't exist)",
     },
     {
       key: "syncDeletedCards",
@@ -101,7 +105,7 @@ function main(baseInfo: LSPluginBaseInfo): void {
       description: "Delete cards from Mochi that no longer exist in Logseq.",
     },
   ];
-  
+
   // Register settings schema
   logseq.useSettingsSchema(settingsTemplate);
 }

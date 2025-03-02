@@ -14,8 +14,10 @@ import {
 // TODO:
 // During sync, we should
 // 1. Populate template from properties
+// 2. Improve GUI: Show "syncing" message until sync is complete
 // 3. Populate tags from properties
 // 4. Figure out attachments from content
+//
 
 /**
  * Extracts markdown content and properties from a block
@@ -592,12 +594,12 @@ export class MochiSync {
         const logseqMochiIds = new Set(
           cardBlocks
             .map(([block]) => block.properties?.["mochi-id"])
-            .filter((id): id is string => Boolean(id))
+            .filter((id): id is string => Boolean(id)),
         );
 
         // Find cards in Mochi that don't exist in Logseq
         const orphans = mochiCards.filter(
-          (mochiCard) => !logseqMochiIds.has(mochiCard.id)
+          (mochiCard) => !logseqMochiIds.has(mochiCard.id),
         );
 
         // Delete orphaned cards
@@ -613,11 +615,11 @@ export class MochiSync {
 
       // Phase 5: Create/Recreate cards that need to exist in Mochi
       let createdCards = 0;
-      const mochiCardIds = new Set(mochiCards.map(card => card.id));
+      const mochiCardIds = new Set(mochiCards.map((card) => card.id));
 
       for (const [block] of cardBlocks) {
         const existingMochiId = block.properties?.["mochi-id"];
-        
+
         // Skip blocks where ID exists in both systems (handled in Phase 6)
         if (existingMochiId && mochiCardIds.has(existingMochiId)) continue;
 
@@ -630,20 +632,23 @@ export class MochiSync {
 
           // Build card content and properties
           const card = await buildCard(expandedBlock);
-          
+
           // Create card in Mochi and get new ID
           const newId = await this.createMochiCard(card, deckMap);
-          
+
           // Update mochi-id property regardless of previous value
           await logseq.Editor.upsertBlockProperty(
             block.uuid,
             "mochi-id",
-            newId
+            newId,
           );
-          
+
           createdCards++;
         } catch (error) {
-          console.error(`Failed to create card for block ${block.uuid}:`, error);
+          console.error(
+            `Failed to create card for block ${block.uuid}:`,
+            error,
+          );
         }
       }
 
@@ -658,7 +663,7 @@ export class MochiSync {
 
       // Create map of Mochi card IDs to their data
       const mochiCardMap = new Map<string, MochiCard>();
-      mochiCards.forEach(card => mochiCardMap.set(card.id, card));
+      mochiCards.forEach((card) => mochiCardMap.set(card.id, card));
 
       // Process each updated card block
       for (const [block] of updatedCardBlocks) {
@@ -685,14 +690,16 @@ export class MochiSync {
           }
 
           // Compare content, deck, and tags
-          const contentChanged = currentCard.content !== existingMochiCard.content;
+          const contentChanged =
+            currentCard.content !== existingMochiCard.content;
           const deckChanged = intendedDeckId !== existingMochiCard["deck-id"];
-          
+
           // Check tags (include 'logseq' in comparison)
-          const expectedTags = [...(currentCard.tags || []), 'logseq'];
+          const expectedTags = [...(currentCard.tags || []), "logseq"];
           const actualTags = existingMochiCard["manual-tags"] || [];
-          const tagsChanged = expectedTags.length !== actualTags.length ||
-            !expectedTags.every(tag => actualTags.includes(tag));
+          const tagsChanged =
+            expectedTags.length !== actualTags.length ||
+            !expectedTags.every((tag) => actualTags.includes(tag));
 
           if (contentChanged || deckChanged || tagsChanged) {
             await this.updateMochiCard(mochiId, currentCard, deckMap);
