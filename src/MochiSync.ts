@@ -294,7 +294,6 @@ export class MochiSync {
           Accept: "application/json",
         },
       });
-      console.log("made request; got response: ", response);
 
       if (!response.ok) {
         const errorText = await response.text();
