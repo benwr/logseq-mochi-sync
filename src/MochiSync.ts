@@ -1,7 +1,12 @@
 import "@logseq/libs";
 import { Mldoc } from "mldoc"; // For parsing org-mode
 import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
-import { CARDTAG_REGEX, CLOZE_REGEX, MOCHI_ID_MAP_KEY, PROPERTY_REGEX } from "./constants";
+import {
+  CARDTAG_REGEX,
+  CLOZE_REGEX,
+  MOCHI_ID_MAP_KEY,
+  PROPERTY_REGEX,
+} from "./constants";
 import { Card, MldocOptions, MochiDeck, PropertyPair } from "./types";
 
 /**
@@ -518,12 +523,14 @@ export class MochiSync {
       // Load the ID map at start of sync
       let idMap: Record<string, string> = {};
       try {
-        const storedMap = await logseq.Storage.getItem(MOCHI_ID_MAP_KEY);
-        if (storedMap && typeof storedMap === 'object') {
+        const storedMap = JSON.parse(
+          await logseq.FileStorage.getItem(MOCHI_ID_MAP_KEY),
+        );
+        if (storedMap && typeof storedMap === "object") {
           idMap = storedMap;
         }
       } catch (error) {
-        console.log('No existing ID map found, initializing new one');
+        console.log("No existing ID map found, initializing new one");
       }
 
       // Fetch cards from Mochi and find all blocks with #card tag in parallel
@@ -558,13 +565,13 @@ export class MochiSync {
         // Build card and add to collection
         const card = await buildCard(expandedBlock);
         processedCards.push(card);
-        
+
         const mochiId = idMap[expandedBlock.uuid];
 
         if (mochiId) {
           logseqMochiIds.add(mochiId);
           const existingCard = mochiCardMap.get(mochiId);
-          
+
           if (existingCard) {
             if (existingCard.content !== card.content) {
               await this.updateMochiCard(mochiId, card);
@@ -590,16 +597,18 @@ export class MochiSync {
       const orphanedCards = mochiCards.filter((c) => !logseqMochiIds.has(c.id));
       for (const card of orphanedCards) {
         await this.deleteMochiCard(card.id);
-        
+
         // Clean up ID map
-        const uuidEntry = Object.entries(idMap).find(([_, id]) => id === card.id);
+        const uuidEntry = Object.entries(idMap).find(
+          ([_, id]) => id === card.id,
+        );
         if (uuidEntry) {
           delete idMap[uuidEntry[0]];
         }
       }
 
       // Save the updated ID map at end of sync
-      await logseq.Storage.setItem(MOCHI_ID_MAP_KEY, idMap);
+      await logseq.FileStorage.setItem(MOCHI_ID_MAP_KEY, JSON.stringify(idMap));
 
       // Show success message
       logseq.UI.showMsg(
