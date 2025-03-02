@@ -13,11 +13,10 @@ import {
 
 // TODO:
 // During sync, we should
-// 1. Populate template from properties
-// 2. Improve GUI: Show "syncing" message until sync is complete
-// 3. Populate tags from properties
-// 4. Figure out attachments from content
-//
+// 1. Improve GUI: Show "syncing" message until sync is complete
+// 2. Populate tags from properties
+// 3. Figure out attachments from content
+// 4. Populate template and fields from properties? This may be hard.
 
 /**
  * Extracts markdown content and properties from a block
