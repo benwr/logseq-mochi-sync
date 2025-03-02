@@ -6,7 +6,7 @@ export interface PropertyPair {
 export interface Card {
   content: string;
   properties: Record<string, string>;
-  deckId?: string;
+  deckname?: string;
   tags?: string[];
 }
 
@@ -40,4 +40,22 @@ export interface MldocExporter {
       end: () => void;
     },
   ) => void;
+}
+
+/**
+ * Interface for Mochi API card responses
+ */
+export interface MochiCard {
+  id: string;
+  content: string;
+  "deck-id": string;
+  "manual-tags"?: string[];
+}
+
+/**
+ * Interface for Mochi API response with pagination
+ */
+export interface MochiApiResponse {
+  docs: MochiCard[];
+  bookmark?: string;
 }

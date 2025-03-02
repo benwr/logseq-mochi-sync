@@ -64,7 +64,7 @@ async function getMarkdownWithProperties(
   }
 
   // New approach: Split into lines and filter out property lines
-  const lines = result.split('\n');
+  const lines = result.split("\n");
   const keptLines: string[] = [];
   const propertyPairs: PropertyPair[] = [];
 
@@ -72,10 +72,10 @@ async function getMarkdownWithProperties(
     const propMatch = PROPERTY_REGEX.exec(line);
     if (propMatch) {
       // Extract property and skip this line
-      const value = propMatch[2] ? propMatch[2].trim() : '';
+      const value = propMatch[2] ? propMatch[2].trim() : "";
       propertyPairs.push({
         key: propMatch[1].trim(),
-        value
+        value,
       });
     } else {
       // Keep non-property lines
@@ -83,7 +83,7 @@ async function getMarkdownWithProperties(
     }
   }
 
-  result = keptLines.join('\n');
+  result = keptLines.join("\n");
 
   // Remove #card tags from remaining content
   result = result.replace(CARDTAG_REGEX, "");
@@ -94,12 +94,7 @@ async function getMarkdownWithProperties(
   // Escape double square brackets to prevent Mochi from interpreting them as links
   result = result.replace(/(?<!\\)(\[\[|\]\])/g, "\\$1");
 
-  // Add a newline at the end if there isn't one
-  if (!result.endsWith("\n")) {
-    result += "\n";
-  }
-
-  return [result, propertyPairs];
+  return [result.trim(), propertyPairs];
 }
 
 /**
@@ -225,10 +220,10 @@ async function buildCard(block: BlockEntity): Promise<Card> {
     );
 
     for (const [content, props] of ancestorContents) {
-      cardChunks.push(content);
       for (const { key, value } of props) {
         properties[key] = value;
       }
+      if (content.trim().length > 0) cardChunks.push(content);
     }
   }
 
