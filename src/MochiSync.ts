@@ -647,9 +647,61 @@ export class MochiSync {
         }
       }
 
-      // Phase 6: For cards that exist in both, update if content or deck doesn't match
+      // Phase 6: Update existing cards that need changes
       let updatedCards = 0;
-      // TODO
+
+      // Re-fetch card blocks to get latest mochi-ids after Phase 5
+      const updatedCardBlocks = await logseq.DB.datascriptQuery(`
+        [:find (pull ?b [*])
+         :where [?t :block/name "card"] [?b :block/refs ?t]]
+      `);
+
+      // Create map of Mochi card IDs to their data
+      const mochiCardMap = new Map<string, MochiCard>();
+      mochiCards.forEach(card => mochiCardMap.set(card.id, card));
+
+      // Process each updated card block
+      for (const [block] of updatedCardBlocks) {
+        const mochiId = block.properties?.["mochi-id"];
+        if (!mochiId || !mochiCardMap.has(mochiId)) continue;
+
+        try {
+          // Get current card state from Logseq
+          const expandedBlock = await logseq.Editor.getBlock(block.id, {
+            includeChildren: true,
+          });
+          if (!expandedBlock) continue;
+
+          const currentCard = await buildCard(expandedBlock);
+          const existingMochiCard = mochiCardMap.get(mochiId)!;
+
+          // Resolve intended deck ID from current configuration
+          let intendedDeckId: string | undefined;
+          if (currentCard.deckname) {
+            intendedDeckId = deckMap.get(currentCard.deckname);
+          } else {
+            const defaultDeck = logseq.settings?.["Default Deck"];
+            intendedDeckId = defaultDeck ? deckMap.get(defaultDeck) : undefined;
+          }
+
+          // Compare content, deck, and tags
+          const contentChanged = currentCard.content !== existingMochiCard.content;
+          const deckChanged = intendedDeckId !== existingMochiCard["deck-id"];
+          
+          // Check tags (include 'logseq' in comparison)
+          const expectedTags = [...(currentCard.tags || []), 'logseq'];
+          const actualTags = existingMochiCard["manual-tags"] || [];
+          const tagsChanged = expectedTags.length !== actualTags.length ||
+            !expectedTags.every(tag => actualTags.includes(tag));
+
+          if (contentChanged || deckChanged || tagsChanged) {
+            await this.updateMochiCard(mochiId, currentCard, deckMap);
+            updatedCards++;
+          }
+        } catch (error) {
+          console.error(`Failed to update card ${mochiId}:`, error);
+        }
+      }
 
       // Show success message
       logseq.UI.showMsg(
