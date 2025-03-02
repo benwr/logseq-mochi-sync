@@ -284,7 +284,6 @@ export class MochiSync {
     do {
       const url = new URL("https://app.mochi.cards/api/cards");
       if (bookmark) url.searchParams.set("bookmark", bookmark);
-      console.log(bookmark);
 
       const response = await fetch(url.toString(), {
         headers: {
@@ -310,7 +309,6 @@ export class MochiSync {
 
       mochiCards.push(...logseqCards);
       bookmark = data.bookmark || null;
-      console.log(bookmark);
     } while (bookmark);
 
     return mochiCards;
@@ -546,14 +544,16 @@ export class MochiSync {
 
         if (!expandedBlock) continue;
 
-        // Get stored Mochi ID from plugin storage
-        const mochiId = await logseq.Storage.getItem(expandedBlock.uuid);
-        
         // Build card and add to collection
         const card = await buildCard(expandedBlock);
         processedCards.push(card);
 
-        if (mochiId) {
+        console.log(expandedBlock.uuid);
+        if (await logseq.FileStorage.hasItem(expandedBlock.uuid)) {
+          // Get stored Mochi ID from plugin storage
+          console.log(expandedBlock.uuid);
+          const mochiId = await logseq.FileStorage.getItem(expandedBlock.uuid);
+          console.log(mochiId);
           logseqMochiIds.add(mochiId);
 
           // Check if the card exists in Mochi and needs updating
@@ -566,14 +566,16 @@ export class MochiSync {
           } else {
             // Card exists in Logseq but not in Mochi - create it
             const newId = await this.createMochiCard(card);
-            await logseq.Storage.setItem(expandedBlock.uuid, newId);
+            console.log(expandedBlock.uuid, newId);
+            await logseq.FileStorage.setItem(expandedBlock.uuid, newId);
             logseqMochiIds.add(newId);
             createdCards++;
           }
         } else {
           // New card - create in Mochi
           const newId = await this.createMochiCard(card);
-          await logseq.Storage.setItem(expandedBlock.uuid, newId);
+          console.log(expandedBlock.uuid, newId);
+          await logseq.FileStorage.setItem(expandedBlock.uuid, newId);
           logseqMochiIds.add(newId);
           createdCards++;
         }
@@ -583,21 +585,27 @@ export class MochiSync {
       const orphanedCards = mochiCards.filter((c) => !logseqMochiIds.has(c.id));
       for (const card of orphanedCards) {
         await this.deleteMochiCard(card.id);
-        
+
         // Clean up storage for deleted cards if we can find the block
         const blockResults = await logseq.DB.datascriptQuery(`
           [:find (pull ?b [:block/uuid])
-           :where 
+           :where
            [?b :block/refs ?t]
            [?t :block/name "card"]]
         `);
-        
+
         if (blockResults && blockResults.length > 0) {
           for (const [blockData] of blockResults) {
-            const storedId = await logseq.Storage.getItem(blockData.uuid);
-            if (storedId === card.id) {
-              await logseq.Storage.removeItem(blockData.uuid);
-              break;
+            console.log(blockData.uuid);
+            if (await logseq.FileStorage.hasItem(blockData.uuid)) {
+              console.log(blockData.uuid);
+              const storedId = await logseq.FileStorage.getItem(blockData.uuid);
+              console.log(storedId);
+              if (storedId === card.id) {
+                console.log(blockData.uuid);
+                await logseq.FileStorage.removeItem(blockData.uuid);
+                break;
+              }
             }
           }
         }
