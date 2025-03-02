@@ -1,11 +1,7 @@
 import "@logseq/libs";
 import { Mldoc } from "mldoc"; // For parsing org-mode
 import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
-import {
-  CARDTAG_REGEX,
-  CLOZE_REGEX,
-  PROPERTY_REGEX,
-} from "./constants";
+import { CARDTAG_REGEX, CLOZE_REGEX, PROPERTY_REGEX } from "./constants";
 import {
   Card,
   MldocOptions,
@@ -543,10 +539,7 @@ export class MochiSync {
       // Show sync starting message
       logseq.UI.showMsg("Starting sync with Mochi...", "info");
 
-      // Get current graph name
-      const graphName = (await logseq.App.getCurrentGraph())?.name || "Default";
-
-      // Fetch cards from Mochi and find all blocks with #card tag in parallel
+      // Fetch cards from Mochi, and find all blocks with #card tag
       const [mochiCards, cardBlocks] = await Promise.all([
         this.fetchMochiCards(),
         logseq.DB.datascriptQuery(`
@@ -555,7 +548,13 @@ export class MochiSync {
         `),
       ]);
 
-      // Phase 1: Collect all required deck names
+      // Phase 1: Get existing decks
+      const existingDecks = await this.fetchDecks();
+      const deckMap = new Map<string, string>(
+        existingDecks.map((d) => [d.name, d.id]),
+      );
+
+      // Phase 2: Collect all required deck names
       const deckNames = new Set<string>();
       const defaultDeckname: string | undefined =
         logseq.settings?.["Default Deck"];
@@ -574,13 +573,7 @@ export class MochiSync {
         }
       }
 
-      // Phase 2: Get existing decks and create missing ones
-      const existingDecks = await this.fetchDecks();
-      const deckMap = new Map<string, string>(
-        existingDecks.map((d) => [d.name, d.id]),
-      );
-
-      // Create missing decks
+      // Phase 3: Create missing decks
       for (const name of deckNames) {
         if (!deckMap.has(name)) {
           try {
@@ -592,93 +585,26 @@ export class MochiSync {
         }
       }
 
-      // Create a map of Mochi card IDs to cards
-      const mochiCardMap = new Map(mochiCards.map((c) => [c.id, c]));
+      // Phase 4: Delete cards with no corresponding logseq block
+      let orphanedCards = 0;
+      // TODO
 
-      // Keep track of Mochi IDs that exist in Logseq
-      const logseqMochiIds = new Set<string>();
+      // Phase 5: Create cards that exist in logseq but not Mochi
+      let createdCards = 0;
+      // TODO
 
-      // Process each card block
-      let processedCards: Card[] = [];
-      let createdCards: number = 0;
-      let updatedCards: number = 0;
-
-      for (const [block] of cardBlocks) {
-        // Get full block with children
-        const expandedBlock = await logseq.Editor.getBlock(block.id, {
-          includeChildren: true,
-        });
-
-        if (!expandedBlock) continue;
-
-        // Build card and add to collection
-        const card = await buildCard(expandedBlock);
-        processedCards.push(card);
-
-        // Get mochiId from block properties
-        const mochiId = expandedBlock.properties?.["mochi-id"];
-
-        if (mochiId) {
-          logseqMochiIds.add(mochiId);
-          const existingCard = mochiCardMap.get(mochiId);
-          
-          if (existingCard) {
-            // Check for content or deck changes
-            const currentDeckId = card.deckname 
-              ? deckMap.get(card.deckname.toLowerCase())
-              : deckMap.get(logseq.settings?.["Default Deck"]?.toLowerCase() || "");
-              
-            if (existingCard.content !== card.content || 
-                existingCard["deck-id"] !== currentDeckId) {
-              await this.updateMochiCard(mochiId, card, deckMap);
-              updatedCards++;
-            }
-          } else {
-            // Stale ID - create new card
-            const newId = await this.createMochiCard(card, deckMap);
-            await logseq.Editor.upsertBlockProperty(expandedBlock.uuid, "mochi-id", newId);
-            logseqMochiIds.add(newId);
-            createdCards++;
-          }
-        } else {
-          // New card
-          const newId = await this.createMochiCard(card, deckMap);
-          await logseq.Editor.upsertBlockProperty(expandedBlock.uuid, "mochi-id", newId);
-          logseqMochiIds.add(newId);
-          createdCards++;
-        }
-      }
-
-      // Find and delete orphaned Mochi cards (cards in Mochi but not in Logseq)
-      const orphanedCards = mochiCards.filter(c => !logseqMochiIds.has(c.id));
-      for (const card of orphanedCards) {
-        await this.deleteMochiCard(card.id);
-        
-        // Clean up any blocks that might reference this ID
-        const blocks = await logseq.DB.datascriptQuery(`
-          [:find (pull ?b [*])
-           :where [?b :block/properties ?p]
-           [(get ?p :mochi-id) "${card.id}"]]
-        `);
-        
-        if (blocks && blocks.length > 0) {
-          for (const [block] of blocks) {
-            await logseq.Editor.removeBlockProperty(block.uuid, "mochi-id");
-          }
-        }
-      }
+      // Phase 6: For cards that exist in both, update if content or deck doesn't match
+      let updatedCards = 0;
+      // TODO
 
       // Show success message
       logseq.UI.showMsg(
-        `Sync complete: ${createdCards} created, ${updatedCards} updated, ${orphanedCards.length} deleted`,
+        `Sync complete: ${createdCards} created, ${updatedCards} updated, ${orphanedCards} deleted`,
         "success",
       );
 
       console.log(
-        `Synced ${processedCards.length} cards from graph "${graphName}" to Mochi`,
-      );
-      console.log(
-        `Sync complete: ${createdCards} created, ${updatedCards} updated, ${orphanedCards.length} deleted`,
+        `Sync complete: ${createdCards} created, ${updatedCards} updated, ${orphanedCards} deleted`,
       );
     } catch (error) {
       console.error("Sync error:", error);
