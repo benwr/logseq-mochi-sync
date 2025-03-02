@@ -251,7 +251,6 @@ async function buildCard(block: BlockEntity): Promise<Card> {
   }
 
   // Extract Mochi-specific properties
-  const mochiId = properties["mochiId"] || undefined;
   const deckId = properties["deckId"] || undefined;
   const tags = properties["tags"]
     ? properties["tags"].split(",").map((t) => t.trim())
@@ -260,7 +259,6 @@ async function buildCard(block: BlockEntity): Promise<Card> {
   return {
     content: cardChunks.join("\n\n"),
     properties,
-    mochiId,
     deckId,
     tags,
   };
@@ -548,40 +546,34 @@ export class MochiSync {
 
         if (!expandedBlock) continue;
 
+        // Get stored Mochi ID from plugin storage
+        const mochiId = await logseq.Storage.getItem(expandedBlock.uuid);
+        
         // Build card and add to collection
         const card = await buildCard(expandedBlock);
         processedCards.push(card);
 
-        // Check if this card already has a Mochi ID
-        if (card.mochiId) {
-          logseqMochiIds.add(card.mochiId);
+        if (mochiId) {
+          logseqMochiIds.add(mochiId);
 
           // Check if the card exists in Mochi and needs updating
-          const existingCard = mochiCardMap.get(card.mochiId);
+          const existingCard = mochiCardMap.get(mochiId);
           if (existingCard) {
             if (existingCard.content !== card.content) {
-              await this.updateMochiCard(card.mochiId, card);
+              await this.updateMochiCard(mochiId, card);
               updatedCards++;
             }
           } else {
             // Card exists in Logseq but not in Mochi - create it
             const newId = await this.createMochiCard(card);
-            await logseq.Editor.upsertBlockProperty(
-              expandedBlock.uuid,
-              "mochiId",
-              newId,
-            );
+            await logseq.Storage.setItem(expandedBlock.uuid, newId);
             logseqMochiIds.add(newId);
             createdCards++;
           }
         } else {
           // New card - create in Mochi
           const newId = await this.createMochiCard(card);
-          await logseq.Editor.upsertBlockProperty(
-            expandedBlock.uuid,
-            "mochiId",
-            newId,
-          );
+          await logseq.Storage.setItem(expandedBlock.uuid, newId);
           logseqMochiIds.add(newId);
           createdCards++;
         }
@@ -591,6 +583,24 @@ export class MochiSync {
       const orphanedCards = mochiCards.filter((c) => !logseqMochiIds.has(c.id));
       for (const card of orphanedCards) {
         await this.deleteMochiCard(card.id);
+        
+        // Clean up storage for deleted cards if we can find the block
+        const blockResults = await logseq.DB.datascriptQuery(`
+          [:find (pull ?b [:block/uuid])
+           :where 
+           [?b :block/refs ?t]
+           [?t :block/name "card"]]
+        `);
+        
+        if (blockResults && blockResults.length > 0) {
+          for (const [blockData] of blockResults) {
+            const storedId = await logseq.Storage.getItem(blockData.uuid);
+            if (storedId === card.id) {
+              await logseq.Storage.removeItem(blockData.uuid);
+              break;
+            }
+          }
+        }
       }
 
       // Show success message
