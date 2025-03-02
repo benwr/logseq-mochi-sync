@@ -77,19 +77,6 @@ function main(baseInfo: LSPluginBaseInfo): void {
       description: "Include ancestor blocks in the card.",
     },
     {
-      key: "deckSelection",
-      type: "enum",
-      default: "Default Deck",
-      title: "Deck Selection",
-      description: "How to select which deck to use for the card.",
-      enumChoices: [
-        "Default Deck",
-        "Page Namespace (or default if none)",
-        "Page Title",
-      ],
-      enumPicker: "select",
-    },
-    {
       key: "Default Deck",
       type: "string",
       default: "",
