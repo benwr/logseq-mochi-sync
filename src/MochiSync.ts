@@ -587,7 +587,29 @@ export class MochiSync {
 
       // Phase 4: Delete cards with no corresponding logseq block
       let orphanedCards = 0;
-      // TODO
+      if (logseq.settings?.syncDeletedCards) {
+        // Get all mochi IDs from Logseq blocks
+        const logseqMochiIds = new Set(
+          cardBlocks
+            .map(([block]) => block.properties?.["mochi-id"])
+            .filter((id): id is string => Boolean(id))
+        );
+
+        // Find cards in Mochi that don't exist in Logseq
+        const orphans = mochiCards.filter(
+          (mochiCard) => !logseqMochiIds.has(mochiCard.id)
+        );
+
+        // Delete orphaned cards
+        for (const card of orphans) {
+          try {
+            await this.deleteMochiCard(card.id);
+            orphanedCards++;
+          } catch (error) {
+            console.error(`Failed to delete card ${card.id}:`, error);
+          }
+        }
+      }
 
       // Phase 5: Create cards that exist in logseq but not Mochi
       let createdCards = 0;
