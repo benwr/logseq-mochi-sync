@@ -613,7 +613,35 @@ export class MochiSync {
 
       // Phase 5: Create cards that exist in logseq but not Mochi
       let createdCards = 0;
-      // TODO
+      for (const [block] of cardBlocks) {
+        // Skip blocks that already have a Mochi ID
+        if (block.properties?.["mochi-id"]) continue;
+
+        try {
+          // Expand block with children content
+          const expandedBlock = await logseq.Editor.getBlock(block.id, {
+            includeChildren: true,
+          });
+          if (!expandedBlock) continue;
+
+          // Build card content and properties
+          const card = await buildCard(expandedBlock);
+          
+          // Create card in Mochi and get new ID
+          const newId = await this.createMochiCard(card, deckMap);
+          
+          // Store Mochi ID in block properties
+          await logseq.Editor.upsertBlockProperty(
+            block.uuid,
+            "mochi-id",
+            newId
+          );
+          
+          createdCards++;
+        } catch (error) {
+          console.error(`Failed to create card for block ${block.uuid}:`, error);
+        }
+      }
 
       // Phase 6: For cards that exist in both, update if content or deck doesn't match
       let updatedCards = 0;
