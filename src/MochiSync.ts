@@ -63,15 +63,29 @@ async function getMarkdownWithProperties(
     result = markdownContent.join("");
   }
 
-  // Extract properties
+  // New approach: Split into lines and filter out property lines
+  const lines = result.split('\n');
+  const keptLines: string[] = [];
   const propertyPairs: PropertyPair[] = [];
-  for (const match of result.matchAll(PROPERTY_REGEX)) {
-    propertyPairs.push({ key: match[1], value: match[2] });
+
+  for (const line of lines) {
+    const propMatch = line.match(PROPERTY_REGEX);
+    if (propMatch) {
+      // Extract property and skip this line
+      propertyPairs.push({
+        key: propMatch[1],
+        value: propMatch[2].trim()
+      });
+    } else {
+      // Keep non-property lines
+      keptLines.push(line);
+    }
   }
 
-  // Clean up the content and convert formats
+  result = keptLines.join('\n');
+
+  // Remove #card tags from remaining content
   result = result.replace(CARDTAG_REGEX, "");
-  result = result.replace(PROPERTY_REGEX, "");
 
   // Convert Logseq cloze format to Mochi format
   result = result.replace(CLOZE_REGEX, "{{$1}}");
