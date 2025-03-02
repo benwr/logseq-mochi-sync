@@ -7,33 +7,20 @@ import {
   MOCHI_ID_MAP_KEY,
   PROPERTY_REGEX,
 } from "./constants";
-import { Card, MldocOptions, MochiDeck, PropertyPair } from "./types";
-
-/**
- * Interface for Mochi API card responses
- */
-interface MochiCard {
-  id: string;
-  content: string;
-  "deck-id": string;
-  "manual-tags"?: string[];
-}
-
-/**
- * Interface for Mochi API response with pagination
- */
-interface MochiApiResponse {
-  docs: MochiCard[];
-  bookmark?: string;
-}
+import {
+  Card,
+  MldocOptions,
+  MochiApiResponse,
+  MochiCard,
+  MochiDeck,
+  PropertyPair,
+} from "./types";
 
 // TODO:
 // During sync, we should
 // 1. Populate template from properties
-// 2. Populate deck from properties
 // 3. Populate tags from properties
 // 4. Figure out attachments from content
-// 5. Store Mochi ID as a property if it doesn't exist (so that we can avoid duplicating cards)
 
 /**
  * Extracts markdown content and properties from a block
@@ -256,7 +243,7 @@ async function buildCard(block: BlockEntity): Promise<Card> {
   }
 
   // Extract Mochi-specific properties
-  const deckId = properties["deckId"] || undefined;
+  const deckname = properties["mochi-deck"] || undefined;
   const tags = properties["tags"]
     ? properties["tags"].split(",").map((t) => t.trim())
     : undefined;
@@ -264,7 +251,7 @@ async function buildCard(block: BlockEntity): Promise<Card> {
   return {
     content: cardChunks.join("\n\n"),
     properties,
-    deckId,
+    deckname,
     tags,
   };
 }
@@ -395,19 +382,23 @@ export class MochiSync {
    * @returns The ID of the created card
    * @throws Error if API key is not configured or API request fails
    */
-  private async createMochiCard(card: Card, deckMap: Map<string, string>): Promise<string> {
+  private async createMochiCard(
+    card: Card,
+    deckMap: Map<string, string>,
+  ): Promise<string> {
     const apiKey = logseq.settings?.mochiApiKey;
     if (!apiKey) throw new Error("Mochi API key not configured");
 
     // Resolve deck ID from pre-built map
     let deckId: string | undefined;
-    
-    if (card.deckId && deckMap.has(card.deckId)) {
-      deckId = deckMap.get(card.deckId);
+
+    if (card.deckname && deckMap.has(card.deckname)) {
+      deckId = deckMap.get(card.deckname);
     } else {
-      const defaultDeckName = logseq.settings?.["Default Deck"];
-      if (defaultDeckName && deckMap.has(defaultDeckName)) {
-        deckId = deckMap.get(defaultDeckName);
+      const defaultDeckname: string | undefined =
+        logseq.settings?.["Default Deck"];
+      if (defaultDeckname && deckMap.has(defaultDeckname)) {
+        deckId = deckMap.get(defaultDeckname);
       }
     }
 
@@ -542,12 +533,12 @@ export class MochiSync {
            :where [?t :block/name "card"] [?b :block/refs ?t]]
         `),
       ]);
-      console.log(mochiCards.length, cardBlocks.length);
 
       // Phase 1: Collect all required deck names
       const deckNames = new Set<string>();
-      const defaultDeckName = logseq.settings?.["Default Deck"];
-      if (defaultDeckName) deckNames.add(defaultDeckName);
+      const defaultDeckname: string | undefined =
+        logseq.settings?.["Default Deck"];
+      if (defaultDeckname) deckNames.add(defaultDeckname);
 
       // Process cards to collect deck names from properties
       for (const [block] of cardBlocks) {
@@ -557,15 +548,17 @@ export class MochiSync {
         if (!expandedBlock) continue;
 
         const card = await buildCard(expandedBlock);
-        if (card.deckId) {
-          deckNames.add(card.deckId);
+        if (card.deckname) {
+          deckNames.add(card.deckname);
         }
       }
 
       // Phase 2: Get existing decks and create missing ones
       const existingDecks = await this.fetchDecks();
-      const deckMap = new Map<string, string>(existingDecks.map(d => [d.name, d.id]));
-      
+      const deckMap = new Map<string, string>(
+        existingDecks.map((d) => [d.name, d.id]),
+      );
+
       // Create missing decks
       for (const name of deckNames) {
         if (!deckMap.has(name)) {
