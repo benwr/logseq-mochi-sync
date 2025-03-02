@@ -18,6 +18,13 @@ const syncWithMochi = async (): Promise<void> => {
  * @param baseInfo - Plugin base information
  */
 function main(baseInfo: LSPluginBaseInfo): void {
+  // Add CSS to hide mochi-id property in UI
+  logseq.provideStyle(`
+    div.properties div[data-ref="mochi-id"] {
+      display: none !important;
+    }
+  `);
+
   // Register model for UI interaction
   logseq.provideModel({
     syncWithMochi,
