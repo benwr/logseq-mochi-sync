@@ -20,8 +20,6 @@ import {
   PropertyPair,
 } from "./types";
 
-// TODO: Add support for template instantiation?
-
 /**
  * Main class for syncing Logseq cards with Mochi
  */
