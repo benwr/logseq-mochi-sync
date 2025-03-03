@@ -18,6 +18,8 @@ export interface Card {
   tags?: string[];
   mochiId?: string;
   attachments?: MediaAttachment[];
+  templateId?: string;
+  fields?: Record<string, { id: string; value: string }>;
 }
 
 export interface MochiDeck {
@@ -63,6 +65,8 @@ export interface MochiCard {
   "manual-tags"?: string[];
   "trashed?"?: string;
   "archived?"?: boolean;
+  "template-id"?: string;
+  fields?: Record<string, { id: string; value: string }>;
 }
 
 /**
@@ -71,4 +75,22 @@ export interface MochiCard {
 export interface MochiApiResponse {
   docs: MochiCard[];
   bookmark?: string;
+}
+
+/**
+ * Interface for Mochi template
+ */
+export interface MochiTemplate {
+  id: string;
+  name: string;
+  content?: string;
+  pos?: string;
+  fields: {
+    [fieldId: string]: {
+      id: string;
+      name: string;
+      pos?: string;
+      options?: Record<string, boolean>;
+    };
+  };
 }

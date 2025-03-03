@@ -31,6 +31,7 @@ export class MochiSync {
   includeAncestorBlocks: boolean;
   includePageTitle: boolean;
   includePageProperties: boolean;
+  templateMap: Map<string, MochiTemplate> = new Map();
 
   constructor(
     mochiApiKey: string,
@@ -463,7 +464,8 @@ export class MochiSync {
       : undefined;
     const mochiId = block.properties?.["mochi-id"];
 
-    return {
+    // Create the card object
+    const card: Card = {
       content: cardChunks.join("\n\n"),
       properties,
       deckname,
@@ -471,6 +473,39 @@ export class MochiSync {
       mochiId,
       attachments: allAttachments.length > 0 ? allAttachments : undefined,
     };
+
+    // Handle template if specified
+    const templateName = properties["mochi-template"];
+    if (templateName && typeof templateName === "string" && this.templateMap.size > 0) {
+      const template = this.templateMap.get(templateName);
+      
+      if (template) {
+        card.templateId = template.id;
+        card.fields = {};
+        
+        // Process each field in the template
+        Object.values(template.fields).forEach(field => {
+          // Look for properties with the pattern mochi-field-{fieldName}
+          const propKey = `mochi-field-${field.name.toLowerCase()}`;
+          
+          // Check for case-insensitive match
+          const matchingKey = Object.keys(properties).find(
+            key => key.toLowerCase() === propKey
+          );
+          
+          if (matchingKey && properties[matchingKey]) {
+            card.fields![field.id] = {
+              id: field.id,
+              value: String(properties[matchingKey])
+            };
+          }
+        });
+      } else {
+        console.warn(`Template "${templateName}" not found in Mochi`);
+      }
+    }
+
+    return card;
   }
 
   /**
@@ -513,8 +548,16 @@ export class MochiSync {
     const tagsChanged =
       expectedTags.length !== actualTags.length ||
       !expectedTags.every((tag) => actualTags.includes(tag));
+      
+    // Check template and fields
+    const templateChanged = currentCard.templateId !== existingMochiCard["template-id"];
+    
+    // Compare fields by stringifying them
+    const fieldsChanged = currentCard.fields 
+      ? JSON.stringify(currentCard.fields) !== JSON.stringify(existingMochiCard.fields)
+      : existingMochiCard.fields !== undefined;
 
-    return contentChanged || deckChanged || tagsChanged;
+    return contentChanged || deckChanged || tagsChanged || templateChanged || fieldsChanged;
   }
 
   /**
@@ -652,17 +695,30 @@ export class MochiSync {
     // Prepare tags (always include 'logseq' tag)
     const tags = [...(card.tags || []), "logseq"];
 
+    // Prepare request body with optional template and fields
+    const body: any = {
+      content: card.content,
+      "deck-id": deckId,
+      "manual-tags": tags,
+    };
+
+    // Add template ID if present
+    if (card.templateId) {
+      body["template-id"] = card.templateId;
+    }
+
+    // Add fields if present
+    if (card.fields) {
+      body.fields = card.fields;
+    }
+
     const response = await fetch("https://app.mochi.cards/api/cards", {
       method: "POST",
       headers: {
         Authorization: `Basic ${btoa(this.mochiApiKey + ":")}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        content: card.content,
-        "deck-id": deckId,
-        "manual-tags": tags,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -706,17 +762,30 @@ export class MochiSync {
     // Prepare tags (always include 'logseq' tag)
     const tags = [...(card.tags || []), "logseq"];
 
+    // Prepare request body with optional template and fields
+    const body: any = {
+      content: card.content,
+      "deck-id": deckId,
+      "manual-tags": tags,
+    };
+
+    // Add template ID if present
+    if (card.templateId) {
+      body["template-id"] = card.templateId;
+    }
+
+    // Add fields if present
+    if (card.fields) {
+      body.fields = card.fields;
+    }
+
     const response = await fetch(`https://app.mochi.cards/api/cards/${id}`, {
       method: "POST",
       headers: {
         Authorization: `Basic ${btoa(this.mochiApiKey + ":")}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        content: card.content,
-        "deck-id": deckId, // Include deck-id in the update
-        "manual-tags": tags,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -961,10 +1030,15 @@ export class MochiSync {
       // Show sync starting message
       // Phase 1: Initial Data Collection
       console.log("Phase 1: Collecting card data from mochi and logseq");
-      const [mochiCards, logseqCards] = await Promise.all([
+      const [mochiCards, logseqCards, templates] = await Promise.all([
         this.fetchMochiCards(),
         this.fetchLogseqCardBlocks(),
+        this.fetchTemplates(),
       ]);
+      
+      // Create template map for quick lookup
+      this.templateMap = new Map(templates.map(t => [t.name, t]));
+      console.log(`Loaded ${templates.length} templates from Mochi`);
 
       // Phase 2: Deck Management
       console.log("Phase 2: Managing decks");
