@@ -583,102 +583,201 @@ export class MochiSync {
         timeout: 100000,
       });
 
-      // Fetch cards from Mochi, and find all blocks with #card tag
-      const [mochiCards, cardBlocks] = await Promise.all([
+      // Phase 1: Initial Data Collection
+      const [mochiCards, logseqCards] = await Promise.all([
         this.fetchMochiCards(),
-        logseq.DB.datascriptQuery(`
-          [:find (pull ?b [*])
-           :where [?t :block/name "card"] [?b :block/refs ?t]]
-        `),
+        this.fetchLogseqCardBlocks(),
       ]);
+      
+      // Phase 2: Deck Management
+      const deckMap = await this.manageDecks(logseqCards);
 
-      // Phase 1: Get existing decks
-      const existingDecks = await this.fetchDecks();
-      const deckMap = new Map<string, string>(
-        existingDecks.map((d) => [d.name, d.id]),
+      // Phase 3: Card Synchronization
+      const { created, updated, deleted } = await this.syncCards(
+        mochiCards,
+        logseqCards,
+        deckMap
       );
 
-      // Phase 2: Collect all required deck names
-      const deckNames = new Set<string>();
-      const defaultDeckname: string | undefined =
-        logseq.settings?.["Default Deck"];
-      if (defaultDeckname) deckNames.add(defaultDeckname);
+      logseq.UI.closeMsg(SYNC_MSG_KEY);
+      // Show success message
+      logseq.UI.showMsg(
+        `Sync complete: ${created} created, ${updated} updated, ${deleted} deleted`,
+        "success",
+      );
 
-      // Process cards to collect deck names from properties
-      for (const [block] of cardBlocks) {
+      console.log(
+        `Sync complete: ${created} created, ${updated} updated, ${deleted} deleted`,
+      );
+    } catch (error) {
+      console.error("Sync error:", error);
+      logseq.UI.showMsg(`Sync failed: ${error.message}`, "error");
+    }
+  }
+
+  /**
+   * Fetches all card blocks from Logseq
+   * 
+   * @returns Array of block entities with #card tag
+   */
+  private async fetchLogseqCardBlocks(): Promise<BlockEntity[]> {
+    const result = await logseq.DB.datascriptQuery(`
+      [:find (pull ?b [*])
+       :where [?t :block/name "card"] [?b :block/refs ?t]]
+    `);
+    return result.map(([block]) => block);
+  }
+
+  /**
+   * Manages decks by creating any missing ones
+   * 
+   * @param logseqCards - Array of Logseq card blocks
+   * @returns Map of deck names to deck IDs
+   */
+  private async manageDecks(logseqCards: BlockEntity[]): Promise<Map<string, string>> {
+    // Get existing decks
+    const existingDecks = await this.fetchDecks();
+    const deckMap = new Map<string, string>(
+      existingDecks.map((d) => [d.name, d.id]),
+    );
+
+    // Collect all required deck names
+    const deckNames = new Set<string>();
+    const defaultDeckname: string | undefined = logseq.settings?.["Default Deck"];
+    if (defaultDeckname) deckNames.add(defaultDeckname);
+
+    // Process cards to collect deck names from properties
+    for (const block of logseqCards) {
+      const expandedBlock = await logseq.Editor.getBlock(block.id, {
+        includeChildren: true,
+      });
+      if (!expandedBlock) continue;
+
+      const card = await buildCard(expandedBlock);
+      if (card.deckname) {
+        deckNames.add(card.deckname);
+      }
+    }
+
+    // Create missing decks
+    for (const name of deckNames) {
+      if (!deckMap.has(name)) {
+        try {
+          const newId = await this.createDeck(name);
+          deckMap.set(name, newId);
+        } catch (error) {
+          console.error(`Failed to create deck ${name}:`, error);
+        }
+      }
+    }
+
+    return deckMap;
+  }
+
+  /**
+   * Synchronizes cards between Logseq and Mochi
+   * 
+   * @param mochiCards - Array of cards from Mochi
+   * @param logseqCards - Array of card blocks from Logseq
+   * @param deckMap - Map of deck names to deck IDs
+   * @returns Object with counts of created, updated, and deleted cards
+   */
+  private async syncCards(
+    mochiCards: MochiCard[],
+    logseqCards: BlockEntity[],
+    deckMap: Map<string, string>
+  ): Promise<{ created: number; updated: number; deleted: number }> {
+    let deleted = 0;
+    
+    // Delete cards with no corresponding logseq block
+    if (logseq.settings?.syncDeletedCards) {
+      deleted = await this.deleteOrphanedCards(mochiCards, logseqCards);
+    }
+
+    // Create new cards and update existing ones
+    const { created, updated } = await this.processLogseqCards(mochiCards, logseqCards, deckMap);
+
+    return { created, updated, deleted };
+  }
+
+  /**
+   * Deletes cards in Mochi that don't exist in Logseq
+   * 
+   * @param mochiCards - Array of cards from Mochi
+   * @param logseqCards - Array of card blocks from Logseq
+   * @returns Number of deleted cards
+   */
+  private async deleteOrphanedCards(
+    mochiCards: MochiCard[],
+    logseqCards: BlockEntity[]
+  ): Promise<number> {
+    let orphanedCards = 0;
+    
+    // Get all mochi IDs from Logseq blocks
+    const logseqMochiIds = new Set(
+      logseqCards
+        .map((block) => block.properties?.["mochi-id"])
+        .filter((id): id is string => Boolean(id)),
+    );
+
+    // Find cards in Mochi that don't exist in Logseq
+    const orphans = mochiCards.filter(
+      (mochiCard) => !logseqMochiIds.has(mochiCard.id),
+    );
+
+    // Delete orphaned cards
+    for (const card of orphans) {
+      try {
+        await this.deleteMochiCard(card.id);
+        orphanedCards++;
+      } catch (error) {
+        console.error(`Failed to delete card ${card.id}:`, error);
+      }
+    }
+    
+    return orphanedCards;
+  }
+
+  /**
+   * Processes Logseq cards to create new ones or update existing ones in Mochi
+   * 
+   * @param mochiCards - Array of cards from Mochi
+   * @param logseqCards - Array of card blocks from Logseq
+   * @param deckMap - Map of deck names to deck IDs
+   * @returns Object with counts of created and updated cards
+   */
+  private async processLogseqCards(
+    mochiCards: MochiCard[],
+    logseqCards: BlockEntity[],
+    deckMap: Map<string, string>
+  ): Promise<{ created: number; updated: number }> {
+    let createdCards = 0;
+    let updatedCards = 0;
+    
+    // Create map of Mochi card IDs to their data
+    const mochiCardMap = new Map<string, MochiCard>();
+    mochiCards.forEach((card) => mochiCardMap.set(card.id, card));
+    
+    // Process each Logseq card block
+    for (const block of logseqCards) {
+      const mochiId = block.properties?.["mochi-id"];
+      
+      try {
+        // Expand block with children content
         const expandedBlock = await logseq.Editor.getBlock(block.id, {
           includeChildren: true,
         });
         if (!expandedBlock) continue;
 
+        // Build card content and properties
         const card = await buildCard(expandedBlock);
-        if (card.deckname) {
-          deckNames.add(card.deckname);
-        }
-      }
 
-      // Phase 3: Create missing decks
-      for (const name of deckNames) {
-        if (!deckMap.has(name)) {
-          try {
-            const newId = await this.createDeck(name);
-            deckMap.set(name, newId);
-          } catch (error) {
-            console.error(`Failed to create deck ${name}:`, error);
-          }
-        }
-      }
-
-      // Phase 4: Delete cards with no corresponding logseq block
-      let orphanedCards = 0;
-      if (logseq.settings?.syncDeletedCards) {
-        // Get all mochi IDs from Logseq blocks
-        const logseqMochiIds = new Set(
-          cardBlocks
-            .map(([block]) => block.properties?.["mochi-id"])
-            .filter((id): id is string => Boolean(id)),
-        );
-
-        // Find cards in Mochi that don't exist in Logseq
-        const orphans = mochiCards.filter(
-          (mochiCard) => !logseqMochiIds.has(mochiCard.id),
-        );
-
-        // Delete orphaned cards
-        for (const card of orphans) {
-          try {
-            await this.deleteMochiCard(card.id);
-            orphanedCards++;
-          } catch (error) {
-            console.error(`Failed to delete card ${card.id}:`, error);
-          }
-        }
-      }
-
-      // Phase 5: Create/Recreate cards that need to exist in Mochi
-      let createdCards = 0;
-      const mochiCardIds = new Set(mochiCards.map((card) => card.id));
-
-      for (const [block] of cardBlocks) {
-        const existingMochiId = block.properties?.["mochi-id"];
-
-        // Skip blocks where ID exists in both systems (handled in Phase 6)
-        if (existingMochiId && mochiCardIds.has(existingMochiId)) continue;
-
-        try {
-          // Expand block with children content
-          const expandedBlock = await logseq.Editor.getBlock(block.id, {
-            includeChildren: true,
-          });
-          if (!expandedBlock) continue;
-
-          // Build card content and properties
-          const card = await buildCard(expandedBlock);
-
+        // Create new card if it doesn't exist in Mochi
+        if (!mochiId || !mochiCardMap.has(mochiId)) {
           // Create card in Mochi and get new ID
           const newId = await this.createMochiCard(card, deckMap);
 
-          // Update mochi-id property regardless of previous value
+          // Update mochi-id property
           await logseq.Editor.upsertBlockProperty(
             block.uuid,
             "mochi-id",
@@ -686,85 +785,59 @@ export class MochiSync {
           );
 
           createdCards++;
-        } catch (error) {
-          console.error(
-            `Failed to create card for block ${block.uuid}:`,
-            error,
-          );
-        }
-      }
-
-      // Phase 6: Update existing cards that need changes
-      let updatedCards = 0;
-
-      // Re-fetch card blocks to get latest mochi-ids after Phase 5
-      const updatedCardBlocks = await logseq.DB.datascriptQuery(`
-        [:find (pull ?b [*])
-         :where [?t :block/name "card"] [?b :block/refs ?t]]
-      `);
-
-      // Create map of Mochi card IDs to their data
-      const mochiCardMap = new Map<string, MochiCard>();
-      mochiCards.forEach((card) => mochiCardMap.set(card.id, card));
-
-      // Process each updated card block
-      for (const [block] of updatedCardBlocks) {
-        const mochiId = block.properties?.["mochi-id"];
-        if (!mochiId || !mochiCardMap.has(mochiId)) continue;
-
-        try {
-          // Get current card state from Logseq
-          const expandedBlock = await logseq.Editor.getBlock(block.id, {
-            includeChildren: true,
-          });
-          if (!expandedBlock) continue;
-
-          const currentCard = await buildCard(expandedBlock);
+        } else {
+          // Update existing card if needed
           const existingMochiCard = mochiCardMap.get(mochiId)!;
-
-          // Resolve intended deck ID from current configuration
-          let intendedDeckId: string | undefined;
-          if (currentCard.deckname) {
-            intendedDeckId = deckMap.get(currentCard.deckname);
-          } else {
-            const defaultDeck = logseq.settings?.["Default Deck"];
-            intendedDeckId = defaultDeck ? deckMap.get(defaultDeck) : undefined;
-          }
-
-          // Compare content, deck, and tags
-          const contentChanged =
-            currentCard.content !== existingMochiCard.content;
-          const deckChanged = intendedDeckId !== existingMochiCard["deck-id"];
-
-          // Check tags (include 'logseq' in comparison)
-          const expectedTags = [...(currentCard.tags || []), "logseq"];
-          const actualTags = existingMochiCard["manual-tags"] || [];
-          const tagsChanged =
-            expectedTags.length !== actualTags.length ||
-            !expectedTags.every((tag) => actualTags.includes(tag));
-
-          if (contentChanged || deckChanged || tagsChanged) {
-            await this.updateMochiCard(mochiId, currentCard, deckMap);
+          
+          if (this.cardNeedsUpdate(card, existingMochiCard, deckMap)) {
+            await this.updateMochiCard(mochiId, card, deckMap);
             updatedCards++;
           }
-        } catch (error) {
-          console.error(`Failed to update card ${mochiId}:`, error);
         }
+      } catch (error) {
+        console.error(
+          `Failed to process card for block ${block.uuid}:`,
+          error,
+        );
       }
-
-      logseq.UI.closeMsg(SYNC_MSG_KEY);
-      // Show success message
-      logseq.UI.showMsg(
-        `Sync complete: ${createdCards} created, ${updatedCards} updated, ${orphanedCards} deleted`,
-        "success",
-      );
-
-      console.log(
-        `Sync complete: ${createdCards} created, ${updatedCards} updated, ${orphanedCards} deleted`,
-      );
-    } catch (error) {
-      console.error("Sync error:", error);
-      logseq.UI.showMsg(`Sync failed: ${error.message}`, "error");
     }
+    
+    return { created: createdCards, updated: updatedCards };
+  }
+
+  /**
+   * Determines if a card needs to be updated in Mochi
+   * 
+   * @param currentCard - The card from Logseq
+   * @param existingMochiCard - The existing card in Mochi
+   * @param deckMap - Map of deck names to deck IDs
+   * @returns True if the card needs to be updated
+   */
+  private cardNeedsUpdate(
+    currentCard: Card,
+    existingMochiCard: MochiCard,
+    deckMap: Map<string, string>
+  ): boolean {
+    // Resolve intended deck ID from current configuration
+    let intendedDeckId: string | undefined;
+    if (currentCard.deckname) {
+      intendedDeckId = deckMap.get(currentCard.deckname);
+    } else {
+      const defaultDeck = logseq.settings?.["Default Deck"];
+      intendedDeckId = defaultDeck ? deckMap.get(defaultDeck) : undefined;
+    }
+
+    // Compare content, deck, and tags
+    const contentChanged = currentCard.content !== existingMochiCard.content;
+    const deckChanged = intendedDeckId !== existingMochiCard["deck-id"];
+
+    // Check tags (include 'logseq' in comparison)
+    const expectedTags = [...(currentCard.tags || []), "logseq"];
+    const actualTags = existingMochiCard["manual-tags"] || [];
+    const tagsChanged =
+      expectedTags.length !== actualTags.length ||
+      !expectedTags.every((tag) => actualTags.includes(tag));
+
+    return contentChanged || deckChanged || tagsChanged;
   }
 }
