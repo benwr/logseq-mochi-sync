@@ -19,16 +19,7 @@ import {
   PropertyPair,
 } from "./types";
 
-// TODO:
-// During sync, we should maybe try to add attachments.
-// This will likely be quite annoying to do properly, since it will involve:
-// 1. Identifying media to attach
-// 2. Ensuring that that media is <5MiB in size
-// 3. Creating the card with placeholder content, since we can't predict the uploaded content URI
-// 4. Uploading the media as an attachment
-// 5. Updating the card with the real attachment URL
-// 6. Somehow reconciling content differences, in order to avoid updates on every sync.
-// I think this is actually not possible, since the mochi API provides no way of knowing whether the media has changed since uploading.
+// TODO: Add support for template instantiation?
 
 /**
  * Main class for syncing Logseq cards with Mochi
