@@ -1,8 +1,10 @@
 {
   "name": "logseq-mochi-sync",
   "version": "1.0.0",
+  "title": "Logseq Mochi Sync",
   "author": "Ben Weinstein-Raun",
   "description": "A Logseq plugin for syncing with Mochi",
+  "repository": "https://github.com/benwr/logseq-mochi-sync",
   "license": "Apache-2.0",
   "main": "dist/index.html",
   "scripts": {
