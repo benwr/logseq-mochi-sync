@@ -199,6 +199,31 @@ async function getPageTitle(blockId: number): Promise<string | null> {
   return null;
 }
 
+async function getPageProperties(
+  blockId: number,
+): Promise<{ key: string; value: string }[]> {
+  const result = await logseq.DB.datascriptQuery(
+    `
+    [
+    :find
+      (pull ?p [*])
+    :in
+      $ ?b
+    :where
+      [?b :block/page ?p]
+    ]
+    `,
+    blockId,
+  );
+
+  if (result.length > 0 && result[0].length > 0) {
+    const page = result[0][0];
+    return page["properties"] || {};
+  }
+
+  return [];
+}
+
 /**
  * Builds a card from a block and its context
  *
@@ -214,20 +239,26 @@ async function buildCard(block: BlockEntity): Promise<Card> {
     const pageTitle = await getPageTitle(block.id);
     if (pageTitle) cardChunks.push(pageTitle);
   }
+  const pageProperties = await getPageProperties(block.id);
+
+  // Add page properties if enabled in settings
+  if (logseq.settings?.includePageProperties) {
+    for (const { key, value } of pageProperties) {
+      properties[key] = value;
+    }
+  }
 
   // Add ancestor blocks if enabled in settings
-  if (logseq.settings?.includeAncestorBlocks) {
-    const ancestors = await getAncestors(block);
-    const ancestorContents = await Promise.all(
-      ancestors
-        .filter((a) => a.content)
-        .map((a) => getMarkdownWithProperties(a)),
-    );
+  const ancestors = await getAncestors(block);
+  const ancestorContents = await Promise.all(
+    ancestors.filter((a) => a.content).map((a) => getMarkdownWithProperties(a)),
+  );
 
-    for (const [content, props] of ancestorContents) {
-      for (const { key, value } of props) {
-        properties[key] = value;
-      }
+  for (const [content, props] of ancestorContents) {
+    for (const { key, value } of props) {
+      properties[key] = value;
+    }
+    if (logseq.settings?.includeAncestorBlocks) {
       if (content.trim().length > 0) cardChunks.push(content);
     }
   }
@@ -549,7 +580,7 @@ export class MochiSync {
       // Show sync starting message
       await logseq.UI.showMsg("Syncing with Mochi...", "info", {
         key: SYNC_MSG_KEY,
-        timeout: 1000000,
+        timeout: 100000,
       });
 
       // Fetch cards from Mochi, and find all blocks with #card tag
