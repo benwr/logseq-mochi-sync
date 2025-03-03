@@ -12,4 +12,5 @@ export const MOCHI_LOGO = `
 export const PROPERTY_REGEX = /^([A-Za-z0-9\?\-]+)::\s*(.*)/;
 export const CARDTAG_REGEX = /#card */g;
 export const CLOZE_REGEX = /\{\{cloze (.*?)\}\}/gm;
+export const MEDIA_REGEX = /!\[([^\]]*)\]\(([^)]+)\)/g;
 export const SYNC_MSG_KEY = "MOCHI_SYNC_MSG";

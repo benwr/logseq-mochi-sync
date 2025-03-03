@@ -4,6 +4,7 @@ import { BlockEntity } from "@logseq/libs/dist/LSPlugin.user";
 import {
   CARDTAG_REGEX,
   CLOZE_REGEX,
+  MEDIA_REGEX,
   PROPERTY_REGEX,
   SYNC_MSG_KEY,
 } from "./constants";
@@ -55,14 +56,14 @@ export class MochiSync {
   }
 
   /**
-   * Extracts markdown content and properties from a block
+   * Extracts markdown content, properties, and media attachments from a block
    *
    * @param block - The block to process
-   * @returns A tuple of [content, properties]
+   * @returns A tuple of [content, properties, attachments]
    */
   private async getMarkdownWithProperties(
     block: BlockEntity,
-  ): Promise<[string, PropertyPair[]]> {
+  ): Promise<[string, PropertyPair[], MediaAttachment[]]> {
     // Default mldoc options for org-mode parsing
     const options: MldocOptions = {
       toc: false,
@@ -126,7 +127,67 @@ export class MochiSync {
     // Escape double square brackets to prevent Mochi from interpreting them as links
     result = result.replace(/(?<!\\)(\[\[|\]\])/g, "\\$1");
 
-    return [result.trim(), propertyPairs];
+    // Process media attachments
+    const mediaAttachments: MediaAttachment[] = [];
+    let modifiedContent = result;
+    
+    let match;
+    const mediaRegexCopy = new RegExp(MEDIA_REGEX); // Create a new instance to reset lastIndex
+    while ((match = mediaRegexCopy.exec(result)) !== null) {
+      const [fullMatch, altText, path] = match;
+      try {
+        // Skip URLs - only process local files
+        if (path.startsWith('http://') || path.startsWith('https://')) {
+          continue;
+        }
+        
+        const assetUrl = await logseq.Assets.makeUrl(path);
+        if (!assetUrl) continue;
+        
+        const response = await fetch(assetUrl);
+        if (!response.ok) continue;
+        
+        const blob = await response.blob();
+        
+        // Skip files larger than 5MB (Mochi's limit)
+        if (blob.size > 5 * 1024 * 1024) {
+          console.warn(`Skipping oversized file: ${path} (${blob.size} bytes)`);
+          continue;
+        }
+
+        // Generate hash for the file content
+        const hashBuffer = await crypto.subtle.digest(
+          'SHA-256', 
+          await blob.arrayBuffer()
+        );
+        const hash = Array.from(new Uint8Array(hashBuffer))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+
+        // Create a filename based on the hash and original extension
+        const filename = path.split('/').pop() || '';
+        const ext = filename.split('.').pop() || '';
+        const newFilename = `${hash.substring(0, 8)}.${ext}`;
+        
+        mediaAttachments.push({
+          hash,
+          originalPath: path,
+          filename: newFilename,
+          contentType: blob.type,
+          content: blob
+        });
+
+        // Replace the image reference with the new filename
+        modifiedContent = modifiedContent.replace(
+          fullMatch, 
+          `![${altText}](${newFilename})`
+        );
+      } catch (error) {
+        console.warn(`Failed to process media ${path}:`, error);
+      }
+    }
+
+    return [modifiedContent.trim(), propertyPairs, mediaAttachments];
   }
 
   /**
@@ -252,6 +313,46 @@ export class MochiSync {
   }
 
   /**
+   * Uploads media attachments for a card to Mochi
+   * 
+   * @param cardId - The ID of the card to attach media to
+   * @param attachments - Array of media attachments to upload
+   */
+  private async uploadAttachments(
+    cardId: string, 
+    attachments: MediaAttachment[]
+  ): Promise<void> {
+    for (const attachment of attachments) {
+      try {
+        // Check if attachment already exists
+        const url = `https://app.mochi.cards/api/cards/${cardId}/attachments/${attachment.filename}`;
+        const check = await fetch(url, {
+          headers: {Authorization: `Basic ${btoa(this.mochiApiKey + ":")}`}
+        });
+        
+        // Only upload if attachment doesn't exist (404)
+        if (check.status === 404) {
+          const form = new FormData();
+          form.append('file', attachment.content, attachment.filename);
+          
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {Authorization: `Basic ${btoa(this.mochiApiKey + ":")}`},
+            body: form
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Failed to upload attachment: ${errorText}`);
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to upload ${attachment.filename}:`, error);
+      }
+    }
+  }
+
+  /**
    * Builds a card from a block and its context
    *
    * @param block - The block to build a card from
@@ -260,6 +361,7 @@ export class MochiSync {
   private async buildCard(block: BlockEntity): Promise<Card> {
     const cardChunks: string[] = [];
     const properties: Record<string, any> = {};
+    const allAttachments: MediaAttachment[] = [];
 
     // Helper function to check property overrides
     const getOverride = (key: string, defaultVal?: any): boolean => {
@@ -289,17 +391,19 @@ export class MochiSync {
         .map((a) => this.getMarkdownWithProperties(a)),
     );
 
-    for (const [content, props] of ancestorContents) {
+    for (const [content, props, attachments] of ancestorContents) {
       for (const { key, value } of props) {
         properties[key] = value;
       }
+      allAttachments.push(...attachments);
     }
 
     // Add the main block content and properties (highest priority)
-    const [content, props] = await this.getMarkdownWithProperties(block);
+    const [content, props, attachments] = await this.getMarkdownWithProperties(block);
     for (const { key, value } of props) {
       properties[key] = value;
     }
+    allAttachments.push(...attachments);
 
     // Determine inclusion flags after all properties are merged
     const includePageTitle = getOverride(
@@ -359,6 +463,7 @@ export class MochiSync {
       deckname,
       tags,
       mochiId,
+      attachments: allAttachments.length > 0 ? allAttachments : undefined,
     };
   }
 
@@ -791,6 +896,11 @@ export class MochiSync {
         if (!mochiId || !mochiCardMap.has(mochiId)) {
           // Create card in Mochi and get new ID
           const newId = await this.createMochiCard(card, deckMap);
+          
+          // Upload any attachments
+          if (card.attachments && card.attachments.length > 0) {
+            await this.uploadAttachments(newId, card.attachments);
+          }
 
           // Update mochi-id property
           await logseq.Editor.upsertBlockProperty(
@@ -806,6 +916,12 @@ export class MochiSync {
 
           if (this.cardNeedsUpdate(card, existingMochiCard, deckMap)) {
             await this.updateMochiCard(mochiId, card, deckMap);
+            
+            // Upload any attachments
+            if (card.attachments && card.attachments.length > 0) {
+              await this.uploadAttachments(mochiId, card.attachments);
+            }
+            
             updatedCards++;
           }
         }

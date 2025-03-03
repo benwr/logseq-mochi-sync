@@ -3,12 +3,21 @@ export interface PropertyPair {
   value: string;
 }
 
+export interface MediaAttachment {
+  hash: string;
+  originalPath: string;
+  filename: string;
+  contentType: string;
+  content: Blob;
+}
+
 export interface Card {
   content: string;
   properties: Record<string, string>;
   deckname?: string;
   tags?: string[];
   mochiId?: string;
+  attachments?: MediaAttachment[];
 }
 
 export interface MochiDeck {
