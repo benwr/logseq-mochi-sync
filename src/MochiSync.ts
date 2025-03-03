@@ -16,6 +16,7 @@ import {
   MochiApiResponse,
   MochiCard,
   MochiDeck,
+  MochiTemplate,
   PropertyPair,
 } from "./types";
 
@@ -476,27 +477,31 @@ export class MochiSync {
 
     // Handle template if specified
     const templateName = properties["mochi-template"];
-    if (templateName && typeof templateName === "string" && this.templateMap.size > 0) {
+    if (
+      templateName &&
+      typeof templateName === "string" &&
+      this.templateMap.size > 0
+    ) {
       const template = this.templateMap.get(templateName);
-      
+
       if (template) {
         card.templateId = template.id;
         card.fields = {};
-        
+
         // Process each field in the template
-        Object.values(template.fields).forEach(field => {
+        Object.values(template.fields).forEach((field) => {
           // Look for properties with the pattern mochi-field-{fieldName}
           const propKey = `mochi-field-${field.name.toLowerCase()}`;
-          
+
           // Check for case-insensitive match
           const matchingKey = Object.keys(properties).find(
-            key => key.toLowerCase() === propKey
+            (key) => key.toLowerCase() === propKey,
           );
-          
+
           if (matchingKey && properties[matchingKey]) {
             card.fields![field.id] = {
               id: field.id,
-              value: String(properties[matchingKey])
+              value: properties[matchingKey],
             };
           }
         });
@@ -548,16 +553,28 @@ export class MochiSync {
     const tagsChanged =
       expectedTags.length !== actualTags.length ||
       !expectedTags.every((tag) => actualTags.includes(tag));
-      
-    // Check template and fields
-    const templateChanged = currentCard.templateId !== existingMochiCard["template-id"];
-    
-    // Compare fields by stringifying them
-    const fieldsChanged = currentCard.fields 
-      ? JSON.stringify(currentCard.fields) !== JSON.stringify(existingMochiCard.fields)
-      : existingMochiCard.fields !== undefined;
 
-    return contentChanged || deckChanged || tagsChanged || templateChanged || fieldsChanged;
+    // Check template and fields
+    let templateChanged = false;
+    if (currentCard.templateId || existingMochiCard["template-id"]) {
+      templateChanged =
+        currentCard.templateId !== existingMochiCard["template-id"];
+    }
+
+    let fieldsChanged = false;
+    if (currentCard.fields || existingMochiCard.fields) {
+      fieldsChanged =
+        JSON.stringify(currentCard.fields) !==
+        JSON.stringify(existingMochiCard.fields);
+    }
+
+    return (
+      contentChanged ||
+      deckChanged ||
+      tagsChanged ||
+      templateChanged ||
+      fieldsChanged
+    );
   }
 
   /**
@@ -639,10 +656,10 @@ export class MochiSync {
 
     return decks;
   }
-  
+
   /**
    * Fetches all templates from Mochi API
-   * 
+   *
    * @returns Array of Mochi templates
    * @throws Error if API key is not configured or API request fails
    */
@@ -1071,9 +1088,9 @@ export class MochiSync {
         this.fetchLogseqCardBlocks(),
         this.fetchTemplates(),
       ]);
-      
+
       // Create template map for quick lookup
-      this.templateMap = new Map(templates.map(t => [t.name, t]));
+      this.templateMap = new Map(templates.map((t) => [t.name, t]));
       console.log(`Loaded ${templates.length} templates from Mochi`);
 
       // Phase 2: Deck Management
