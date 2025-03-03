@@ -639,6 +639,42 @@ export class MochiSync {
 
     return decks;
   }
+  
+  /**
+   * Fetches all templates from Mochi API
+   * 
+   * @returns Array of Mochi templates
+   * @throws Error if API key is not configured or API request fails
+   */
+  private async fetchTemplates(): Promise<MochiTemplate[]> {
+    const templates: MochiTemplate[] = [];
+    let bookmark: string | null = null;
+
+    do {
+      const url = new URL("https://app.mochi.cards/api/templates");
+      if (bookmark) url.searchParams.set("bookmark", bookmark);
+
+      const response = await fetch(url.toString(), {
+        headers: {
+          Authorization: `Basic ${btoa(this.mochiApiKey + ":")}`,
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Mochi API error (${response.status}): ${errorText}`);
+      }
+
+      const data = await response.json();
+      if (!data.docs || data.docs.length === 0) break;
+
+      templates.push(...data.docs);
+      bookmark = data.bookmark || null;
+    } while (bookmark);
+
+    return templates;
+  }
   /**
    * Creates a deck with the specified name
    *
