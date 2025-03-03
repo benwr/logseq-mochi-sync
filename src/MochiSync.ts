@@ -290,8 +290,8 @@ async function buildCard(block: BlockEntity): Promise<Card> {
 
   // Extract Mochi-specific properties
   const deckname = properties["mochi-deck"] || undefined;
-  const tags = properties["tags"]
-    ? properties["tags"].split(",").map((t) => t.trim())
+  const tags = properties["mochi-tags"]
+    ? properties["mochi-tags"].split(",").map((t) => t.trim())
     : undefined;
   const mochiId = block.properties?.["mochi-id"];
 
@@ -444,9 +444,8 @@ export class MochiSync {
     if (card.deckname && deckMap.has(card.deckname)) {
       deckId = deckMap.get(card.deckname);
     } else {
-      const defaultDeckname: string | undefined =
-        logseq.settings?.["Default Deck"];
-      if (defaultDeckname && deckMap.has(defaultDeckname)) {
+      const defaultDeckname = logseq.settings?.["Default Deck"];
+      if (typeof defaultDeckname === "string" && deckMap.has(defaultDeckname)) {
         deckId = deckMap.get(defaultDeckname);
       }
     }
@@ -503,9 +502,8 @@ export class MochiSync {
     if (card.deckname && deckMap.has(card.deckname)) {
       deckId = deckMap.get(card.deckname);
     } else {
-      const defaultDeckname: string | undefined =
-        logseq.settings?.["Default Deck"];
-      if (defaultDeckname && deckMap.has(defaultDeckname)) {
+      const defaultDeckname = logseq.settings?.["Default Deck"];
+      if (typeof defaultDeckname === "string" && deckMap.has(defaultDeckname)) {
         deckId = deckMap.get(defaultDeckname);
       }
     }
@@ -588,7 +586,7 @@ export class MochiSync {
         this.fetchMochiCards(),
         this.fetchLogseqCardBlocks(),
       ]);
-      
+
       // Phase 2: Deck Management
       const deckMap = await this.manageDecks(logseqCards);
 
@@ -596,7 +594,7 @@ export class MochiSync {
       const { created, updated, deleted } = await this.syncCards(
         mochiCards,
         logseqCards,
-        deckMap
+        deckMap,
       );
 
       logseq.UI.closeMsg(SYNC_MSG_KEY);
@@ -617,7 +615,7 @@ export class MochiSync {
 
   /**
    * Fetches all card blocks from Logseq
-   * 
+   *
    * @returns Array of block entities with #card tag
    */
   private async fetchLogseqCardBlocks(): Promise<BlockEntity[]> {
@@ -630,11 +628,13 @@ export class MochiSync {
 
   /**
    * Manages decks by creating any missing ones
-   * 
+   *
    * @param logseqCards - Array of Logseq card blocks
    * @returns Map of deck names to deck IDs
    */
-  private async manageDecks(logseqCards: BlockEntity[]): Promise<Map<string, string>> {
+  private async manageDecks(
+    logseqCards: BlockEntity[],
+  ): Promise<Map<string, string>> {
     // Get existing decks
     const existingDecks = await this.fetchDecks();
     const deckMap = new Map<string, string>(
@@ -643,8 +643,7 @@ export class MochiSync {
 
     // Collect all required deck names
     const deckNames = new Set<string>();
-    const defaultDeckname: string | undefined = logseq.settings?.["Default Deck"];
-    if (defaultDeckname) deckNames.add(defaultDeckname);
+    const defaultDeckname = logseq.settings?.["Default Deck"];
 
     // Process cards to collect deck names from properties
     for (const block of logseqCards) {
@@ -656,6 +655,8 @@ export class MochiSync {
       const card = await buildCard(expandedBlock);
       if (card.deckname) {
         deckNames.add(card.deckname);
+      } else if (typeof defaultDeckname === "string") {
+        deckNames.add(defaultDeckname);
       }
     }
 
@@ -676,7 +677,7 @@ export class MochiSync {
 
   /**
    * Synchronizes cards between Logseq and Mochi
-   * 
+   *
    * @param mochiCards - Array of cards from Mochi
    * @param logseqCards - Array of card blocks from Logseq
    * @param deckMap - Map of deck names to deck IDs
@@ -685,34 +686,38 @@ export class MochiSync {
   private async syncCards(
     mochiCards: MochiCard[],
     logseqCards: BlockEntity[],
-    deckMap: Map<string, string>
+    deckMap: Map<string, string>,
   ): Promise<{ created: number; updated: number; deleted: number }> {
     let deleted = 0;
-    
+
     // Delete cards with no corresponding logseq block
     if (logseq.settings?.syncDeletedCards) {
       deleted = await this.deleteOrphanedCards(mochiCards, logseqCards);
     }
 
     // Create new cards and update existing ones
-    const { created, updated } = await this.processLogseqCards(mochiCards, logseqCards, deckMap);
+    const { created, updated } = await this.processLogseqCards(
+      mochiCards,
+      logseqCards,
+      deckMap,
+    );
 
     return { created, updated, deleted };
   }
 
   /**
    * Deletes cards in Mochi that don't exist in Logseq
-   * 
+   *
    * @param mochiCards - Array of cards from Mochi
    * @param logseqCards - Array of card blocks from Logseq
    * @returns Number of deleted cards
    */
   private async deleteOrphanedCards(
     mochiCards: MochiCard[],
-    logseqCards: BlockEntity[]
+    logseqCards: BlockEntity[],
   ): Promise<number> {
     let orphanedCards = 0;
-    
+
     // Get all mochi IDs from Logseq blocks
     const logseqMochiIds = new Set(
       logseqCards
@@ -734,13 +739,13 @@ export class MochiSync {
         console.error(`Failed to delete card ${card.id}:`, error);
       }
     }
-    
+
     return orphanedCards;
   }
 
   /**
    * Processes Logseq cards to create new ones or update existing ones in Mochi
-   * 
+   *
    * @param mochiCards - Array of cards from Mochi
    * @param logseqCards - Array of card blocks from Logseq
    * @param deckMap - Map of deck names to deck IDs
@@ -749,19 +754,19 @@ export class MochiSync {
   private async processLogseqCards(
     mochiCards: MochiCard[],
     logseqCards: BlockEntity[],
-    deckMap: Map<string, string>
+    deckMap: Map<string, string>,
   ): Promise<{ created: number; updated: number }> {
     let createdCards = 0;
     let updatedCards = 0;
-    
+
     // Create map of Mochi card IDs to their data
     const mochiCardMap = new Map<string, MochiCard>();
     mochiCards.forEach((card) => mochiCardMap.set(card.id, card));
-    
+
     // Process each Logseq card block
     for (const block of logseqCards) {
       const mochiId = block.properties?.["mochi-id"];
-      
+
       try {
         // Expand block with children content
         const expandedBlock = await logseq.Editor.getBlock(block.id, {
@@ -788,26 +793,23 @@ export class MochiSync {
         } else {
           // Update existing card if needed
           const existingMochiCard = mochiCardMap.get(mochiId)!;
-          
+
           if (this.cardNeedsUpdate(card, existingMochiCard, deckMap)) {
             await this.updateMochiCard(mochiId, card, deckMap);
             updatedCards++;
           }
         }
       } catch (error) {
-        console.error(
-          `Failed to process card for block ${block.uuid}:`,
-          error,
-        );
+        console.error(`Failed to process card for block ${block.uuid}:`, error);
       }
     }
-    
+
     return { created: createdCards, updated: updatedCards };
   }
 
   /**
    * Determines if a card needs to be updated in Mochi
-   * 
+   *
    * @param currentCard - The card from Logseq
    * @param existingMochiCard - The existing card in Mochi
    * @param deckMap - Map of deck names to deck IDs
@@ -816,7 +818,7 @@ export class MochiSync {
   private cardNeedsUpdate(
     currentCard: Card,
     existingMochiCard: MochiCard,
-    deckMap: Map<string, string>
+    deckMap: Map<string, string>,
   ): boolean {
     // Resolve intended deck ID from current configuration
     let intendedDeckId: string | undefined;
@@ -824,7 +826,8 @@ export class MochiSync {
       intendedDeckId = deckMap.get(currentCard.deckname);
     } else {
       const defaultDeck = logseq.settings?.["Default Deck"];
-      intendedDeckId = defaultDeck ? deckMap.get(defaultDeck) : undefined;
+      intendedDeckId =
+        typeof defaultDeck === "string" ? deckMap.get(defaultDeck) : undefined;
     }
 
     // Compare content, deck, and tags
