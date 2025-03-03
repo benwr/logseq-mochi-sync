@@ -2,6 +2,12 @@
 
  One-way synchronization of flashcards from Logseq to Mochi
 
+ ![](./logseq_thermodynamics.png)
+
+ ↓
+
+ ![](./mochi_thermodynamics.png)
+
  ## Features
 
  - Syncs Logseq blocks tagged `#card` to Mochi
