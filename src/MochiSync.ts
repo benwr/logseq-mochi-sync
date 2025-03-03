@@ -234,11 +234,17 @@ async function buildCard(block: BlockEntity): Promise<Card> {
   const cardChunks: string[] = [];
   const properties: Record<string, string> = {};
 
-  // Add page title if enabled in settings
-  if (logseq.settings?.includePageTitle) {
-    const pageTitle = await getPageTitle(block.id);
-    if (pageTitle) cardChunks.push(pageTitle);
-  }
+  // Helper function to check property overrides
+  const getOverride = (key: string, defaultVal?: boolean): boolean => {
+    if (key in properties) {
+      const val = String(properties[key]).toLowerCase();
+      return val !== 'false' && val !== 'no'; // Consider any value except false/no as true
+    }
+    return defaultVal ?? false;
+  };
+
+  // Get page title and properties
+  const pageTitle = await getPageTitle(block.id);
   const pageProperties = await getPageProperties(block.id);
 
   // Add page properties if enabled in settings
@@ -248,7 +254,7 @@ async function buildCard(block: BlockEntity): Promise<Card> {
     }
   }
 
-  // Add ancestor blocks if enabled in settings
+  // Add ancestor blocks and their properties
   const ancestors = await getAncestors(block);
   const ancestorContents = await Promise.all(
     ancestors.filter((a) => a.content).map((a) => getMarkdownWithProperties(a)),
@@ -258,17 +264,40 @@ async function buildCard(block: BlockEntity): Promise<Card> {
     for (const { key, value } of props) {
       properties[key] = value;
     }
-    if (logseq.settings?.includeAncestorBlocks) {
-      if (content.trim().length > 0) cardChunks.push(content);
+  }
+
+  // Add the main block content and properties (highest priority)
+  const [content, props] = await getMarkdownWithProperties(block);
+  for (const { key, value } of props) {
+    properties[key] = value;
+  }
+
+  // Determine inclusion flags after all properties are merged
+  const includePageTitle = getOverride(
+    'mochi-include-page-title',
+    logseq.settings?.includePageTitle
+  );
+  const includeAncestorBlocks = getOverride(
+    'mochi-include-ancestors',
+    logseq.settings?.includeAncestorBlocks
+  );
+
+  // Add page title if enabled
+  if (includePageTitle && pageTitle) {
+    cardChunks.push(pageTitle);
+  }
+
+  // Add ancestor blocks if enabled
+  if (includeAncestorBlocks) {
+    for (const [ancestorContent, _] of ancestorContents) {
+      if (ancestorContent.trim().length > 0) {
+        cardChunks.push(ancestorContent);
+      }
     }
   }
 
   // Add the main block content
-  const [content, props] = await getMarkdownWithProperties(block);
   cardChunks.push(content);
-  for (const { key, value } of props) {
-    properties[key] = value;
-  }
 
   const children = block.children || [];
 
