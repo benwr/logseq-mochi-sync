@@ -14,3 +14,4 @@ export const CARDTAG_REGEX = /#card */g;
 export const CLOZE_REGEX = /\{\{cloze (.*?)\}\}/gm;
 export const MEDIA_REGEX = /!\[([^\]]*)\]\(([^)]+)\)/g;
 export const SYNC_MSG_KEY = "MOCHI_SYNC_MSG";
+export const MOCHI_MAX_ATTACHMENT_SIZE = 5 * 1000 * 1000;

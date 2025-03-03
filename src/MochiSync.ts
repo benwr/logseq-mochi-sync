@@ -5,11 +5,13 @@ import {
   CARDTAG_REGEX,
   CLOZE_REGEX,
   MEDIA_REGEX,
+  MOCHI_MAX_ATTACHMENT_SIZE,
   PROPERTY_REGEX,
   SYNC_MSG_KEY,
 } from "./constants";
 import {
   Card,
+  MediaAttachment,
   MldocOptions,
   MochiApiResponse,
   MochiCard,
@@ -130,57 +132,60 @@ export class MochiSync {
     // Process media attachments
     const mediaAttachments: MediaAttachment[] = [];
     let modifiedContent = result;
-    
+
     let match;
     const mediaRegexCopy = new RegExp(MEDIA_REGEX); // Create a new instance to reset lastIndex
     while ((match = mediaRegexCopy.exec(result)) !== null) {
       const [fullMatch, altText, path] = match;
       try {
         // Skip URLs - only process local files
-        if (path.startsWith('http://') || path.startsWith('https://')) {
+        if (path.includes("://") && !path.startsWith("file://")) {
           continue;
         }
-        
-        const assetUrl = await logseq.Assets.makeUrl(path);
+
+        const assetUrl = (await logseq.Assets.makeUrl(path)).replace(
+          "assets://",
+          "file://",
+        );
         if (!assetUrl) continue;
-        
+
         const response = await fetch(assetUrl);
         if (!response.ok) continue;
-        
+
         const blob = await response.blob();
-        
+
         // Skip files larger than 5MB (Mochi's limit)
-        if (blob.size > 5 * 1024 * 1024) {
+        if (blob.size > MOCHI_MAX_ATTACHMENT_SIZE) {
           console.warn(`Skipping oversized file: ${path} (${blob.size} bytes)`);
           continue;
         }
 
         // Generate hash for the file content
         const hashBuffer = await crypto.subtle.digest(
-          'SHA-256', 
-          await blob.arrayBuffer()
+          "SHA-256",
+          await blob.arrayBuffer(),
         );
         const hash = Array.from(new Uint8Array(hashBuffer))
-          .map(b => b.toString(16).padStart(2, '0'))
-          .join('');
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("");
 
         // Create a filename based on the hash and original extension
-        const filename = path.split('/').pop() || '';
-        const ext = filename.split('.').pop() || '';
-        const newFilename = `${hash.substring(0, 8)}.${ext}`;
-        
+        const filename = path.split("/").pop() || "";
+        const ext = filename.split(".").pop() || "";
+        const newFilename = `${hash.slice(0, 8)}.${ext}`;
+
         mediaAttachments.push({
           hash,
           originalPath: path,
           filename: newFilename,
           contentType: blob.type,
-          content: blob
+          content: blob,
         });
 
         // Replace the image reference with the new filename
         modifiedContent = modifiedContent.replace(
-          fullMatch, 
-          `![${altText}](${newFilename})`
+          fullMatch,
+          `![${altText}](${newFilename})`,
         );
       } catch (error) {
         console.warn(`Failed to process media ${path}:`, error);
@@ -230,8 +235,9 @@ export class MochiSync {
   private async renderWithDescendants(
     block: BlockEntity,
     level: number = 0,
-  ): Promise<string> {
-    const [content, _] = await this.getMarkdownWithProperties(block);
+  ): Promise<[string, MediaAttachment[]]> {
+    const [content, _, attachments] =
+      await this.getMarkdownWithProperties(block);
 
     // Format current block based on level
     const currentBlockContent =
@@ -239,24 +245,30 @@ export class MochiSync {
 
     // Return early if no children
     if (!block.children || block.children.length === 0) {
-      return currentBlockContent;
+      return [currentBlockContent, attachments];
     }
 
     // Process children recursively
-    const childrenContent = await Promise.all(
+    const childrenContent: [string, MediaAttachment[]][] = await Promise.all(
       block.children.map(async (child) => {
         // If child is a UUID tuple, fetch the actual block
         const childBlock = Array.isArray(child)
           ? await logseq.Editor.getBlock(child[0])
           : child;
 
-        if (!childBlock) return "";
+        if (!childBlock) return ["", []];
         return this.renderWithDescendants(childBlock, level + 1);
       }),
     );
 
+    let resultContent: string[] = [currentBlockContent];
+    for (const [childContent, childAttachments] of childrenContent) {
+      resultContent.push(childContent);
+      attachments.push(...childAttachments);
+    }
+
     // Combine current block with children
-    return [currentBlockContent, ...childrenContent].join("\n");
+    return [resultContent.join("\n"), attachments];
   }
 
   /**
@@ -314,33 +326,33 @@ export class MochiSync {
 
   /**
    * Uploads media attachments for a card to Mochi
-   * 
+   *
    * @param cardId - The ID of the card to attach media to
    * @param attachments - Array of media attachments to upload
    */
   private async uploadAttachments(
-    cardId: string, 
-    attachments: MediaAttachment[]
+    cardId: string,
+    attachments: MediaAttachment[],
   ): Promise<void> {
     for (const attachment of attachments) {
       try {
         // Check if attachment already exists
         const url = `https://app.mochi.cards/api/cards/${cardId}/attachments/${attachment.filename}`;
         const check = await fetch(url, {
-          headers: {Authorization: `Basic ${btoa(this.mochiApiKey + ":")}`}
+          headers: { Authorization: `Basic ${btoa(this.mochiApiKey + ":")}` },
         });
-        
+
         // Only upload if attachment doesn't exist (404)
         if (check.status === 404) {
           const form = new FormData();
-          form.append('file', attachment.content, attachment.filename);
-          
+          form.append("file", attachment.content, attachment.filename);
+
           const response = await fetch(url, {
-            method: 'POST',
-            headers: {Authorization: `Basic ${btoa(this.mochiApiKey + ":")}`},
-            body: form
+            method: "POST",
+            headers: { Authorization: `Basic ${btoa(this.mochiApiKey + ":")}` },
+            body: form,
           });
-          
+
           if (!response.ok) {
             const errorText = await response.text();
             console.error(`Failed to upload attachment: ${errorText}`);
@@ -399,7 +411,8 @@ export class MochiSync {
     }
 
     // Add the main block content and properties (highest priority)
-    const [content, props, attachments] = await this.getMarkdownWithProperties(block);
+    const [content, props, attachments] =
+      await this.getMarkdownWithProperties(block);
     for (const { key, value } of props) {
       properties[key] = value;
     }
@@ -445,8 +458,10 @@ export class MochiSync {
         if (!childBlock) continue;
 
         cardChunks.push("---");
-        const childContent = await this.renderWithDescendants(childBlock, 0);
+        const [childContent, childAttachments] =
+          await this.renderWithDescendants(childBlock, 0);
         cardChunks.push(childContent);
+        allAttachments.push(...childAttachments);
       }
     }
 
@@ -486,6 +501,15 @@ export class MochiSync {
       intendedDeckId = deckMap.get(currentCard.deckname);
     } else {
       intendedDeckId = deckMap.get(this.defaultDeckName);
+    }
+
+    for (const attachment of currentCard.attachments || []) {
+      if (
+        !existingMochiCard.attachments ||
+        !existingMochiCard.attachments[attachment.filename]
+      ) {
+        return true;
+      }
     }
 
     // Compare content, deck, and tags
@@ -896,7 +920,7 @@ export class MochiSync {
         if (!mochiId || !mochiCardMap.has(mochiId)) {
           // Create card in Mochi and get new ID
           const newId = await this.createMochiCard(card, deckMap);
-          
+
           // Upload any attachments
           if (card.attachments && card.attachments.length > 0) {
             await this.uploadAttachments(newId, card.attachments);
@@ -916,12 +940,12 @@ export class MochiSync {
 
           if (this.cardNeedsUpdate(card, existingMochiCard, deckMap)) {
             await this.updateMochiCard(mochiId, card, deckMap);
-            
+
             // Upload any attachments
             if (card.attachments && card.attachments.length > 0) {
               await this.uploadAttachments(mochiId, card.attachments);
             }
-            
+
             updatedCards++;
           }
         }

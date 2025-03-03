@@ -58,6 +58,7 @@ export interface MldocExporter {
 export interface MochiCard {
   id: string;
   content: string;
+  attachments?: { string: { size: string; type: string } };
   "deck-id": string;
   "manual-tags"?: string[];
   "trashed?"?: string;

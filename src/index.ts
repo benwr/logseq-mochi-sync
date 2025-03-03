@@ -117,7 +117,7 @@ function main(baseInfo: LSPluginBaseInfo): void {
     {
       key: "defaultDeckName",
       type: "string",
-      default: "",
+      default: "Logseq",
       title: "Default Deck Name",
       description:
         "Name of default Mochi deck (will be created if it doesn't exist)",
