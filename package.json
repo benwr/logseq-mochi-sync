@@ -12,7 +12,8 @@
     "serve": "vite build --watch"
   },
   "logseq": {
-    "id": "_c4uiessg7"
+    "id": "_c4uiessg7",
+    "icon": "/icon.png"
   },
   "dependencies": {
     "@logseq/libs": "0.0.17",
