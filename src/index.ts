@@ -17,10 +17,6 @@ const syncWithMochi = async (): Promise<void> => {
     logseq.UI.showMsg("Default deck name is not set", "error");
     return;
   }
-  if (typeof logseq.settings?.syncDeletedCards !== "boolean") {
-    logseq.UI.showMsg("Sync deleted cards is not set", "error");
-    return;
-  }
   if (typeof logseq.settings?.includeAncestorBlocks !== "boolean") {
     logseq.UI.showMsg("Include ancestor blocks is not set", "error");
     return;
@@ -29,17 +25,11 @@ const syncWithMochi = async (): Promise<void> => {
     logseq.UI.showMsg("Include page title is not set", "error");
     return;
   }
-  if (typeof logseq.settings?.includePageProperties !== "boolean") {
-    logseq.UI.showMsg("Include page properties is not set", "error");
-    return;
-  }
   await new MochiSync(
     logseq.settings?.mochiApiKey,
     logseq.settings?.defaultDeckName,
-    logseq.settings?.syncDeletedCards,
     logseq.settings?.includeAncestorBlocks,
     logseq.settings?.includePageTitle,
-    logseq.settings?.includePageProperties,
   ).sync();
 };
 
@@ -101,13 +91,6 @@ function main(baseInfo: LSPluginBaseInfo): void {
       description: "Include page title in the card.",
     },
     {
-      key: "includePageProperties",
-      type: "boolean",
-      default: true,
-      title: "Include Page Properties",
-      description: "Card properties inherit from page properties.",
-    },
-    {
       key: "includeAncestorBlocks",
       type: "boolean",
       default: true,
@@ -121,13 +104,6 @@ function main(baseInfo: LSPluginBaseInfo): void {
       title: "Default Deck Name",
       description:
         "Name of default Mochi deck (will be created if it doesn't exist)",
-    },
-    {
-      key: "syncDeletedCards",
-      type: "boolean",
-      default: true,
-      title: "Delete Orphaned Cards",
-      description: "Delete cards from Mochi that no longer exist in Logseq.",
     },
   ];
 

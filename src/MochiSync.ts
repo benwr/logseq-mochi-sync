@@ -26,26 +26,20 @@ import {
 export class MochiSync {
   mochiApiKey: string;
   defaultDeckName: string;
-  syncDeletedCards: boolean;
   includeAncestorBlocks: boolean;
   includePageTitle: boolean;
-  includePageProperties: boolean;
   templateMap: Map<string, MochiTemplate> = new Map();
 
   constructor(
     mochiApiKey: string,
     defaultDeckName: string,
-    syncDeletedCards: boolean,
     includeAncestorBlocks: boolean,
     includePageTitle: boolean,
-    includePageProperties: boolean,
   ) {
     this.mochiApiKey = mochiApiKey;
     this.defaultDeckName = defaultDeckName;
-    this.syncDeletedCards = syncDeletedCards;
     this.includeAncestorBlocks = includeAncestorBlocks;
     this.includePageTitle = includePageTitle;
-    this.includePageProperties = includePageProperties;
   }
 
   /**
@@ -89,7 +83,7 @@ export class MochiSync {
       result = markdownContent.join("");
     }
 
-    // New approach: Split into lines and filter out property lines
+    // Split into lines and filter out property lines
     const lines = result.split("\n");
     const keptLines: string[] = [];
     const propertyPairs: PropertyPair[] = [];
@@ -380,7 +374,7 @@ export class MochiSync {
     const pageProperties = await this.getPageProperties(block.id);
 
     // Add page properties if enabled in settings
-    if (this.includePageProperties && typeof pageProperties === "object") {
+    if (typeof pageProperties === "object") {
       for (const [key, value] of Object.entries(pageProperties)) {
         properties[key] = value;
       }
@@ -941,9 +935,7 @@ export class MochiSync {
     let deleted = 0;
 
     // Delete cards with no corresponding logseq block
-    if (this.syncDeletedCards) {
-      deleted = await this.deleteOrphanedCards(mochiCards, logseqCards);
-    }
+    deleted = await this.deleteOrphanedCards(mochiCards, logseqCards);
 
     // Create new cards and update existing ones
     const { created, updated } = await this.processLogseqCards(
