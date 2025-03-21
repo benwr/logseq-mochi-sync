@@ -38,7 +38,26 @@ Once we've constructed all of our cards, it's time to actually do the sync.
 
 Once we have the cards constructed, it's time to sync. First we grab the card
 list from Mochi, filtered by the `#logseq` tag (all cards we create are tagged
-with #logseq in mochi). We compare the content of the cards in this list,
+with #logseq in mochi). We also get the list of decks and create a map from deck
+name to deck ID, and do the same for templates.
+
+For each local card, we:
+
+1. Check to see if it has a mochi id. If it does, check for an upstream card. If
+there is no upstream card of no mochi id, create the card.
+2. If the card has an upstream counterpart, look at the content, tags, deck, and
+attachments of the upstream card. If they match the local card, we don't need to
+do anything. If they don't match, we need to update the remote card.
+
+Creating or updating a card will typically involve:
+1. Calling the relevant method
+2. Uploading any attachments that aren't yet uploaded (which you can tell by
+examining the filename, which will be different if the content is different).
+
+
+For each remote card, if there is no local card with the corresponding ID, we should delete it.
+
+We compare the content of the cards in this list,
 against the constructed cards. If a card that is in both Logseq and Mochi has
 differing content, we update it in Mochi. If a card that is in Logseq is not in
 Mochi, we create it newly. If a card that is in Mochi is not in Logseq, we

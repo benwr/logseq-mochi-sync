@@ -1,7 +1,7 @@
 import "@logseq/libs";
 import { LSPluginBaseInfo } from "@logseq/libs/dist/LSPlugin";
 import { SettingSchemaDesc } from "@logseq/libs/dist/LSPlugin";
-import { MochiSync } from "./MochiSync";
+import { sync } from "./MochiSync";
 import { MOCHI_LOGO } from "./constants";
 
 /**
@@ -9,11 +9,17 @@ import { MOCHI_LOGO } from "./constants";
  */
 const syncWithMochi = async (): Promise<void> => {
   console.log("Starting Mochi sync...");
-  if (typeof logseq.settings?.mochiApiKey !== "string") {
+  if (
+    typeof logseq.settings?.mochiApiKey !== "string" ||
+    logseq.settings?.mochiApiKey.trim() === ""
+  ) {
     logseq.UI.showMsg("Mochi API key is not set", "error");
     return;
   }
-  if (typeof logseq.settings?.defaultDeckName !== "string") {
+  if (
+    typeof logseq.settings?.defaultDeckName !== "string" ||
+    logseq.settings?.defaultDeckName.trim() === ""
+  ) {
     logseq.UI.showMsg("Default deck name is not set", "error");
     return;
   }
@@ -25,12 +31,12 @@ const syncWithMochi = async (): Promise<void> => {
     logseq.UI.showMsg("Include page title is not set", "error");
     return;
   }
-  await new MochiSync(
+  await sync(
     logseq.settings?.mochiApiKey,
     logseq.settings?.defaultDeckName,
     logseq.settings?.includeAncestorBlocks,
     logseq.settings?.includePageTitle,
-  ).sync();
+  );
 };
 
 /**

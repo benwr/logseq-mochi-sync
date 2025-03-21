@@ -16,8 +16,7 @@
     "icon": "/icon.png"
   },
   "dependencies": {
-    "@logseq/libs": "0.0.17",
-    "mldoc": "1.5.9"
+    "@logseq/libs": "0.0.17"
   },
   "devDependencies": {
     "vite": "6.x",

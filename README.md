@@ -66,10 +66,3 @@ the content changes)
   mochi-field-City:: Paris
   mochi-field-Population:: 2.1 million
 ```
-
- ## Installation (Manual)
-
- ⚠️ Not yet available in Logseq Marketplace. Install manually:
- 1. Clone repo
- 2. `pnpm install && pnpm build`
- 3. Load plugin in Logseq via "Load unpacked plugin"
