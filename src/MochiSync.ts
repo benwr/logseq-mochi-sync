@@ -233,13 +233,13 @@ class Attachment {
       await result.blob.arrayBuffer(),
     );
     const hash = btoa(String.fromCharCode(...new Uint8Array(hashBuffer)))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
+      .replace(/\+/g, "A")
+      .replace(/\//g, "B")
       .replace(/=+$/, "");
 
     // Create a filename based on the hash and original extension
     const ext = (url.split("/").pop() || "").split(".").pop() || "";
-    const newFilename = `${hash.slice(0, 8)}.${ext}`;
+    const newFilename = `${hash.slice(0, 12)}.${ext}`;
     result.filename = newFilename;
     return result;
   }
@@ -505,11 +505,11 @@ class Card {
       mochiTemplates,
     );
 
-    await logseq.Editor.upsertBlockProperty(
-      this.uuid,
-      "mochi-id",
-      (await response.json()).id,
-    );
+    const mochiId = (await response.json()).id();
+
+    await logseq.Editor.upsertBlockProperty(this.uuid, "mochi-id", mochiId);
+
+    this.properties["mochi-id"] = mochiId;
   }
 
   async ensureUploaded(
