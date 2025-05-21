@@ -504,9 +504,8 @@ class Card {
       mochiDecks,
       mochiTemplates,
     );
-
-    const mochiId = (await response.json()).id();
-
+    let json_result = await response.json();
+    const mochiId = json_result.id;
     await logseq.Editor.upsertBlockProperty(this.uuid, "mochi-id", mochiId);
 
     this.properties["mochi-id"] = mochiId;
