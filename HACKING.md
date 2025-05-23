@@ -1,4 +1,25 @@
+# Getting started
+
+In order to work on this plugin, you'll need:
+
+* node.js (probably the latest version is fine; I most recently used 24.1.0 as of 2025-05-23)
+* pnpm (again, probably any recent version will work though I most recently used 10.11.0)
+
+To get started, clone the repository and install dependencies:
+
+```
+git clone https://github.com/yourusername/logseq-mochi-sync.git
+cd logseq-mochi-sync
+pnpm install
+```
+
+Then run `pnpm build` (or `pnpm serve` to rebuild on changes changes). Then,
+ensure that you have developer settings turned on in Logseq, and then load this
+repository from the plugin marketplace as an "unpacked" plugin.
+
 # The basic algorithm
+
+Here's the basic idea of how syncing works:
 
 ## Card construction
 
@@ -44,21 +65,21 @@ name to deck ID, and do the same for templates.
 For each local card, we:
 
 1. Check to see if it has a mochi id. If it does, check for an upstream card. If
-there is no upstream card of no mochi id, create the card.
+there is no corresponding upstream card or no mochi id, create the card.
 2. If the card has an upstream counterpart, look at the content, tags, deck, and
 attachments of the upstream card. If they match the local card, we don't need to
 do anything. If they don't match, we need to update the remote card.
 
 Creating or updating a card will typically involve:
-1. Calling the relevant method
+1. Calling the relevant API method
 2. Uploading any attachments that aren't yet uploaded (which you can tell by
 examining the filename, which will be different if the content is different).
 
 
-For each remote card, if there is no local card with the corresponding ID, we should delete it.
+For each remote card, if there is no local card with the corresponding ID, we
+should delete it.
 
-We compare the content of the cards in this list,
-against the constructed cards. If a card that is in both Logseq and Mochi has
-differing content, we update it in Mochi. If a card that is in Logseq is not in
-Mochi, we create it newly. If a card that is in Mochi is not in Logseq, we
-delete it in Mochi.
+We compare the content of the cards in this list, against the constructed cards.
+If a card that is in both Logseq and Mochi has differing content, we update it
+in Mochi. If a card that is in Logseq is not in Mochi, we create it newly. If a
+card that is in Mochi is not in Logseq, we delete it in Mochi.
