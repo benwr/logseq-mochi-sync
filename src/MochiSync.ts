@@ -46,6 +46,37 @@ function setEq<T>(a: Set<T>, b: Set<T>): boolean {
   return a.size === b.size && [...a].every((value) => b.has(value));
 }
 
+const requestTimestamps: number[] = [];
+const RATE_LIMIT = 10;
+const TIME_WINDOW = 10000; // 10 seconds in milliseconds
+
+async function fetchRateLimited(url, mochiApiKey, args) {
+  // Remove timestamps older than 10 seconds
+  const now = Date.now();
+  while (
+    requestTimestamps.length > 0 &&
+    requestTimestamps[0] < now - TIME_WINDOW
+  ) {
+    requestTimestamps.shift();
+  }
+
+  // If at rate limit, wait until the oldest request expires
+  if (requestTimestamps.length >= RATE_LIMIT) {
+    const waitTime = requestTimestamps[0] + TIME_WINDOW - now;
+    await new Promise((resolve) => setTimeout(resolve, waitTime));
+    requestTimestamps.shift();
+  }
+
+  // Record this request and proceed
+  requestTimestamps.push(Date.now());
+
+  args.headers = {
+    ...args.headers,
+    Authorization: `Basic ${btoa(mochiApiKey + ":")}`,
+  };
+  return await fetch(url.toString(), args);
+}
+
 async function getCardBlockEntities(): Promise<BlockEntity[]> {
   // Example BlockEntity:
   // {
@@ -193,14 +224,15 @@ async function createDeck(
   mochiApiKey: string,
   name: string,
 ): Promise<MochiDeck> {
-  const response = await fetch("https://app.mochi.cards/api/decks", {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${btoa(mochiApiKey + ":")}`,
-      "Content-Type": "application/json",
+  const response = await fetchRateLimited(
+    "https://app.mochi.cards/api/decks",
+    mochiApiKey,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
     },
-    body: JSON.stringify({ name }),
-  });
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to create deck: ${await response.text()}`);
@@ -246,19 +278,15 @@ class Attachment {
 
   async upload(mochiApiKey: string, cardId: string) {
     const url = `https://app.mochi.cards/api/cards/${cardId}/attachments/${this.filename}`;
-    const check = await fetch(url, {
-      method: "HEAD",
-      headers: { Authorization: `Basic ${btoa(mochiApiKey + ":")}` },
-    });
+    const check = await fetchRateLimited(url, mochiApiKey, { method: "HEAD" });
 
     // Only upload if attachment doesn't exist (404)
     if (this.blob && check.status === 404) {
       const form = new FormData();
       form.append("file", this.blob, this.filename);
 
-      const response = await fetch(url, {
+      const response = await fetchRateLimited(url, mochiApiKey, {
         method: "POST",
-        headers: { Authorization: `Basic ${btoa(mochiApiKey + ":")}` },
         body: form,
       });
 
@@ -461,12 +489,9 @@ class Card {
       }
     }
 
-    const response = await fetch(mochiUrl, {
+    const response = await fetchRateLimited(mochiUrl, mochiApiKey, {
       method: "POST",
-      headers: {
-        Authorization: `Basic ${btoa(mochiApiKey + ":")}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
@@ -552,11 +577,8 @@ async function fetchMochi(
     const url = new URL(endpoint);
     if (bookmark) url.searchParams.set("bookmark", bookmark);
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Basic ${btoa(mochiApiKey + ":")}`,
-        Accept: "application/json",
-      },
+    const response = await fetchRateLimited(url.toString(), mochiApiKey, {
+      headers: { Accept: "application/json" },
     });
 
     if (!response.ok) {
@@ -612,12 +634,11 @@ async function fetchMochiData(apiKey: string): Promise<{
 }
 
 async function deleteMochiCard(mochiApiKey: string, id: string): Promise<void> {
-  const response = await fetch(`https://app.mochi.cards/api/cards/${id}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Basic ${btoa(mochiApiKey + ":")}`,
-    },
-  });
+  const response = await fetchRateLimited(
+    `https://app.mochi.cards/api/cards/${id}`,
+    mochiApiKey,
+    { method: "DELETE" },
+  );
 
   if (!response.ok) {
     throw new Error(
